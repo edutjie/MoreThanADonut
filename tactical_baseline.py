@@ -55,9 +55,8 @@ def fill_short_gaps(ball, fps, observation_confidence=None):
     return filled, confidence
 
 
-def tracking_evidence(positions, teams, pitch, fps, observation_confidence=None):
+def tracking_evidence(positions, ball, confidence, teams, pitch, fps):
     """Score each live team by proximity and score D from observed pitch exits."""
-    ball, confidence = fill_short_gaps(positions[:, -1], fps, observation_confidence)
     distance = np.linalg.norm(positions[:, :-1] - ball[:, None], axis=2)
     distance[~np.isfinite(distance)] = np.inf
     nearest = np.column_stack([distance[:, teams == side].min(axis=1) for side in (0, 1)])
@@ -136,7 +135,7 @@ def add_tag_evidence(evidence, speed, confidence, near_line, tags, offset, fps):
     evidence += restart_support
 
 
-def decode(evidence):
+def decode(evidence, dead_entry=None):
     """Find the best half-wide sequence with explicit turnover and stoppage costs."""
     # Uniform cues can support the current state without creating a frame-level vote.
     transitions = np.array([[0.0, 1.55, 0.85], [1.55, 0.0, 0.85], [0.85, 0.85, 0.0]])
@@ -146,9 +145,11 @@ def decode(evidence):
     score = evidence[0].copy()
     for frame in range(1, len(evidence)):
         options = score[:, None] - transitions
+        if dead_entry is not None:
+            options[:2, 2] += dead_entry[frame]
         origin = options.argmax(axis=0)
         best = options[origin, state_ids]
-        origin = np.where(score == best, state_ids, origin)
+        origin = np.where(np.diag(options) == best, state_ids, origin)
         previous[frame] = origin
         score = best + evidence[frame]
 
@@ -159,7 +160,23 @@ def decode(evidence):
     return LABELS[states]
 
 
-def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detector_range=None):
+def write_ball_positions(path, frames, ball, pitch):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(mode="w", dir=path.parent, suffix=".tmp", delete=False) as output:
+        temporary = Path(output.name)
+        try:
+            with output:
+                np.savetxt(output, np.column_stack((frames, ball / pitch)),
+                           fmt=("%d", "%.9g", "%.9g"), delimiter=",", header="frame,x,y", comments="")
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detector_range=None,
+          recovery_output=None, interpolation_output=None, stoppage_cues=None):
+    if recovery_output is not None and ball_detector is None:
+        raise ValueError("recovery output requires a ball detector")
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir)
     tags_path = Path(asset_paths(data_dir=data_dir)["smart_tagging"])
     tags = load_tags(data_dir=data_dir) if use_tags and tags_path.is_file() else []
@@ -170,6 +187,10 @@ def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detect
     fps = GAMES[GAME]["fps"]
     pitch = np.asarray(GAMES[GAME]["pitch"], dtype=np.float32)
     n_frames = source_frames()
+    if stoppage_cues is not None:
+        from dead_ball import read_cues, stoppage_entry_bonus
+
+        cues = read_cues(stoppage_cues, n_frames)
     print(f"Reading tactical tracking and {len(tags)} Smart Tags", flush=True)
     tracking = read_tracking(raw, n_frames, len(teams), pitch)
     observation_confidence = np.ones(n_frames)
@@ -180,13 +201,27 @@ def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detect
                                  device, detector_range)
         observation_confidence[recovered] = 0.55
     labels = np.full(n_frames, "X")
+    interpolated = []
     for _, start, last in half_video_blocks(GAME):
         half = slice(start, last + 1)
+        original = tracking[half, -1]
+        ball, weights = fill_short_gaps(original, fps, observation_confidence[half])
+        if interpolation_output is not None:
+            filled = np.flatnonzero((weights > 0) & ~np.isfinite(original).all(axis=1))
+            interpolated.append((filled + start, ball[filled]))
         evidence, speed, confidence, near_line = tracking_evidence(
-            tracking[half], teams, pitch, fps, observation_confidence[half])
+            tracking[half], ball, weights, teams, pitch, fps)
         add_tag_evidence(evidence, speed, confidence, near_line, tags, start, fps)
         if np.any(evidence):
-            labels[half] = decode(evidence)
+            entry = (stoppage_entry_bonus(cues[half], speed, confidence, fps)
+                     if stoppage_cues is not None else None)
+            labels[half] = decode(evidence, entry)
+    if recovery_output is not None:
+        frames = np.flatnonzero(recovered)
+        write_ball_positions(recovery_output, frames, tracking[frames, -1], pitch)
+    if interpolation_output is not None:
+        frames, positions = zip(*interpolated)
+        write_ball_positions(interpolation_output, np.concatenate(frames), np.concatenate(positions), pitch)
     return labels
 
 
@@ -198,9 +233,22 @@ def main():
     parser.add_argument("--device", default="cpu", help="inference device (cpu by default)")
     parser.add_argument("--detector-range", type=int, nargs=2, metavar=("START", "STOP"),
                         help="limit video inference to a half-open frame range for diagnostics")
+    parser.add_argument("--recovery-output", type=Path,
+                        help="write accepted YOLO positions as frame,x,y with normalized coordinates")
+    parser.add_argument("--interpolation-output", type=Path,
+                        help="write interpolated ball positions separately as frame,x,y")
+    parser.add_argument("--stoppage-cues", type=Path, help="optional whistle and raised-arm CSV from dead_ball.py")
     parser.add_argument("--output", type=Path,
                         default=Path("evaluation/results/tactical_decoder.csv"))
     args = parser.parse_args()
+    if args.recovery_output is not None and args.ball_detector is None:
+        parser.error("--recovery-output requires --ball-detector")
+    outputs = [path.resolve() for path in (args.output, args.recovery_output, args.interpolation_output)
+               if path is not None]
+    if len(outputs) != len(set(outputs)):
+        parser.error("each output needs a separate path")
+    if args.stoppage_cues is not None and args.stoppage_cues.resolve() in outputs:
+        parser.error("--stoppage-cues must be separate from the output paths")
     if args.detector_range and (
         args.ball_detector is None
         or not 0 <= args.detector_range[0] < args.detector_range[1] <= source_frames()
@@ -209,7 +257,8 @@ def main():
     try:
         labels = build(args.data_dir, use_tags=not args.tracking_only,
                        ball_detector=args.ball_detector, device=args.device,
-                       detector_range=args.detector_range)
+                       detector_range=args.detector_range, recovery_output=args.recovery_output,
+                       interpolation_output=args.interpolation_output, stoppage_cues=args.stoppage_cues)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with NamedTemporaryFile(dir=args.output.parent, suffix=".tmp", delete=False) as handle:
             temporary = Path(handle.name)

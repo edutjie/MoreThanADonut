@@ -13,6 +13,15 @@ TOUCHLINE_MARGIN = 3.0  # metres
 BATCH_SIZE = 8
 
 
+def ball_class_ids(names):
+    """Accept soccer-specific and COCO checkpoint labels."""
+    classes = [index for index, name in names.items()
+               if name.strip().casefold() in {"ball", "sports ball", "soccer ball", "football"}]
+    if not classes:
+        raise ValueError("detector has no recognized ball class")
+    return classes
+
+
 def plausible_pairs(left, right, elapsed, fps):
     return np.linalg.norm(left - right, axis=-1) <= MAX_SPEED * elapsed / fps + POSITION_SLACK
 
@@ -32,7 +41,7 @@ def accept_candidates(ball, candidates, fps):
     return supported & np.isfinite(candidates).all(axis=1)
 
 
-def detect_candidates(cap, model, frames, matrices, pitch, device, start, stop):
+def detect_candidates(cap, model, frames, matrices, pitch, device, start, stop, classes):
     """Decode sequentially and run the detector on eligible frames in batches."""
     result = np.full((stop - start, 2), np.nan, dtype=np.float32)
     if not len(frames):
@@ -53,7 +62,8 @@ def detect_candidates(cap, model, frames, matrices, pitch, device, start, stop):
                 raise ValueError(f"could not read tactical video frame {target}")
             next_frame += 1
             images.append(image)
-        predictions = model.predict(images, imgsz=1280, conf=0.25, device=device, verbose=False)
+        predictions = model.predict(images, imgsz=1280, conf=0.25, device=device,
+                                    classes=classes, verbose=False)
         for frame, prediction in zip(indices, predictions, strict=True):
             boxes = prediction.boxes
             if not len(boxes):
@@ -80,8 +90,7 @@ def recover_ball(ball, pitch, fps, data_dir, checkpoint, device, frame_range=Non
     valid &= np.isfinite(matrices).all(axis=(1, 2))
     valid[valid] = np.abs(np.linalg.det(matrices[valid])) > 1e-12
     model = YOLO(str(checkpoint), task="detect")
-    if model.names != {0: "ball"}:
-        raise ValueError("expected a detector with one class named ball")
+    classes = ball_class_ids(model.names)
     missing = ~np.isfinite(ball).all(axis=1)
     recovered = np.zeros(len(ball), dtype=bool)
     cap = cv2.VideoCapture(video)
@@ -99,7 +108,8 @@ def recover_ball(ball, pitch, fps, data_dir, checkpoint, device, frame_range=Non
             frames = np.flatnonzero(missing[region] & valid[region]) + start
             print(f"Running {checkpoint.name} on {len(frames):,} eligible missing frames",
                   flush=True)
-            candidates = detect_candidates(cap, model, frames, matrices, pitch, device, start, stop)
+            candidates = detect_candidates(cap, model, frames, matrices, pitch, device, start, stop,
+                                           classes)
             accepted = accept_candidates(ball[region], candidates, fps)
             ball[region][accepted] = candidates[accepted]
             recovered[region] = accepted
