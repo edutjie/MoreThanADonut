@@ -38,7 +38,7 @@ def enumerate_tracking(path, n_frames):
         raise ValueError(f"{path}: expected {n_frames} frames, found {count}")
 
 
-def fill_short_gaps(ball, fps):
+def fill_short_gaps(ball, fps, observation_confidence=None):
     """Interpolate bounded gaps of up to 0.5 s within a half."""
     filled = ball.copy()
     observed = np.isfinite(ball).all(axis=1)
@@ -50,13 +50,14 @@ def fill_short_gaps(ball, fps):
             if np.linalg.norm(ball[right] - ball[left]) <= 32 * (right - left) / fps:
                 weight = np.arange(1, gap + 1)[:, None] / (gap + 1)
                 filled[left + 1:right] = ball[left] + weight * (ball[right] - ball[left])
-    confidence = np.where(observed, 1.0, np.where(np.isfinite(filled).all(axis=1), 0.45, 0.0))
+    weights = np.ones(len(ball)) if observation_confidence is None else observation_confidence
+    confidence = np.where(observed, weights, np.where(np.isfinite(filled).all(axis=1), 0.45, 0.0))
     return filled, confidence
 
 
-def tracking_evidence(positions, teams, pitch, fps):
+def tracking_evidence(positions, teams, pitch, fps, observation_confidence=None):
     """Score each live team by proximity and score D from observed pitch exits."""
-    ball, confidence = fill_short_gaps(positions[:, -1], fps)
+    ball, confidence = fill_short_gaps(positions[:, -1], fps, observation_confidence)
     distance = np.linalg.norm(positions[:, :-1] - ball[:, None], axis=2)
     distance[~np.isfinite(distance)] = np.inf
     nearest = np.column_stack([distance[:, teams == side].min(axis=1) for side in (0, 1)])
@@ -158,7 +159,7 @@ def decode(evidence):
     return LABELS[states]
 
 
-def build(data_dir=None, use_tags=True):
+def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detector_range=None):
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir)
     tags_path = Path(asset_paths(data_dir=data_dir)["smart_tagging"])
     tags = load_tags(data_dir=data_dir) if use_tags and tags_path.is_file() else []
@@ -171,10 +172,18 @@ def build(data_dir=None, use_tags=True):
     n_frames = source_frames()
     print(f"Reading tactical tracking and {len(tags)} Smart Tags", flush=True)
     tracking = read_tracking(raw, n_frames, len(teams), pitch)
+    observation_confidence = np.ones(n_frames)
+    if ball_detector is not None:
+        from video_ball import recover_ball
+
+        recovered = recover_ball(tracking[:, -1], pitch, fps, data_dir, ball_detector,
+                                 device, detector_range)
+        observation_confidence[recovered] = 0.55
     labels = np.full(n_frames, "X")
     for _, start, last in half_video_blocks(GAME):
         half = slice(start, last + 1)
-        evidence, speed, confidence, near_line = tracking_evidence(tracking[half], teams, pitch, fps)
+        evidence, speed, confidence, near_line = tracking_evidence(
+            tracking[half], teams, pitch, fps, observation_confidence[half])
         add_tag_evidence(evidence, speed, confidence, near_line, tags, start, fps)
         if np.any(evidence):
             labels[half] = decode(evidence)
@@ -185,11 +194,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", help="bundle root (defaults to MTAH_DATA_DIR or ./data)")
     parser.add_argument("--tracking-only", action="store_true", help="skip Smart Tags")
+    parser.add_argument("--ball-detector", type=Path, help="local SoccerNet-v3D checkpoint")
+    parser.add_argument("--device", default="cpu", help="inference device (cpu by default)")
+    parser.add_argument("--detector-range", type=int, nargs=2, metavar=("START", "STOP"),
+                        help="limit video inference to a half-open frame range for diagnostics")
     parser.add_argument("--output", type=Path,
                         default=Path("evaluation/results/tactical_decoder.csv"))
     args = parser.parse_args()
+    if args.detector_range and (
+        args.ball_detector is None
+        or not 0 <= args.detector_range[0] < args.detector_range[1] <= source_frames()
+    ):
+        parser.error("--detector-range needs a checkpoint and valid tactical frame bounds")
     try:
-        labels = build(args.data_dir, use_tags=not args.tracking_only)
+        labels = build(args.data_dir, use_tags=not args.tracking_only,
+                       ball_detector=args.ball_detector, device=args.device,
+                       detector_range=args.detector_range)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with NamedTemporaryFile(dir=args.output.parent, suffix=".tmp", delete=False) as handle:
             temporary = Path(handle.name)

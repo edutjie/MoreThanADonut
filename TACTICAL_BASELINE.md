@@ -42,3 +42,33 @@ turnover or stoppage. The restart heuristic can miss restarts with poor
 tracking and may miss fouls or other stoppages in the middle of the pitch.
 The model uses the tactical tracking and tag intervals directly and does
 not need video decoding, homography, or broadcast synchronization.
+
+## Optional ball recovery from video
+
+Download `yolo-sn-ball-opt.pt` from the authors' [SoccerNet-v3D weight list](https://github.com/mguti97/SoccerNet-v3D#weights)
+and put it under `models/`. This mode also requires the tactical MP4 and
+homography CSV in the same bundle as the tracking export.
+
+```bash
+uv pip install --python .venv/bin/python -r requirements-video.txt
+.venv/bin/python tactical_baseline.py \
+  --data-dir "data/More Than A Hack 2027 - Initial Challenge - Dataset" \
+  --ball-detector models/yolo-sn-ball-opt.pt \
+  --output submissions/TEAM_NAME.csv
+.venv/bin/python evaluation/validate_submission.py submissions/TEAM_NAME.csv
+```
+
+Use `--device` to select an accelerator supported by the local installation.
+For a quick public-window pipeline check, use `--detector-range 11185 18685`.
+That option only enables video recovery in that window. Omit it for
+full-match recovery.
+
+The frozen detector runs locally on frames with missing ball coordinates.
+The inverse homography projects the highest-confidence box center onto the
+pitch plane. Candidates must fall within three metres of the pitch bounds,
+have a plausible neighboring observation, and agree with nearby ATD anchors
+when available. Accepted video locations contribute at 55% of the weight of
+an original tracking observation. The existing interpolation, Smart Tags and
+Viterbi decoder then run as usual. Projection can be inaccurate for aerial
+balls, and a persistent false detection can still pass the temporal checks.
+The detector and filter settings are fixed before the automatic public check.

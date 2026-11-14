@@ -1,0 +1,5 @@
+-r requirements-baseline.txt
+ultralytics==8.4.212
+torch==2.15.0
+torchvision==0.29.2
+opencv-python==5.0.0.93

@@ -26,6 +26,7 @@ evaluation/results/*.csv
 evaluation/reports/
 evaluation/scoreboard.csv
 submissions/
+models/*.pt
 
 # -- gated data --------------------------------------------------------------------------------
 # data/ is committed empty, with only its README, so the folder participants are told to unpack
