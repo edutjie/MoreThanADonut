@@ -1,0 +1,19 @@
+<type>(<scope>): <short summary>
+
+Changes:
+- <What changed in this commit>
+
+Why:
+- <Reason or linked decision>
+
+Validation:
+- <Exact checks and results, or not run and reason>
+
+Risks / follow-up:
+- <Compatibility impact, unfinished work, or none>
+
+Human-Owner: <human name or stable handle>
+Agent-Identity: <tool; model identifier or unavailable; role>
+Agent-Session: <session-id>
+Change-Id: <session-id>-<repo-slug>-<sequence>
+Handoff: handoffs/<session-id>.md
