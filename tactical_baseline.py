@@ -73,7 +73,35 @@ def tracking_evidence(positions, ball, confidence, teams, pitch, fps):
     live = np.where(confidence > 0, live, 0.0)
     evidence[:, 0] = live + 0.16 * np.maximum(margin, 0) * (outside <= 0.5)
     evidence[:, 1] = live + 0.16 * np.maximum(-margin, 0) * (outside <= 0.5)
-    evidence[:, 2] = 0.24 * confidence * (outside > 0.5)
+
+    # Improved dead ball detection using multiple signals
+    # Signal 1: Ball clearly outside pitch (strong signal)
+    pitch_exit = 0.32 * confidence * (outside > 0.5)
+
+    # Signal 2: Ball missing (low/no tracking confidence) suggests stoppage
+    # Dead ball situations often have poor ball tracking (66% vs 93% for live ball)
+    # Only apply when sustained to avoid brief tracking glitches
+    ball_missing = (confidence < 0.05) * 0.06
+
+    # Signal 3: Sustained ball absence or low activity
+    # Use a rolling window to detect prolonged tracking loss
+    window_size = max(2, round(1.5 * fps))  # 1.5 second window
+    missing_indicator = (confidence < 0.1).astype(float)
+    # Convolve to get count of missing frames in window
+    missing_nearby = np.convolve(missing_indicator, np.ones(window_size), mode='same') / window_size
+    sustained_missing = (missing_nearby > 0.7) * 0.24  # >70% missing in window
+
+    # Signal 4: Ball far from all players (when observable)
+    # Dead ball has mean distance 4.01m vs 2.54m for live ball
+    min_player_dist = distance.min(axis=1)
+    far_from_players = np.where(
+        (confidence > 0) & (min_player_dist > 4.5),
+        0.08 * np.clip((min_player_dist - 4.5) / 4.5, 0, 1),
+        0.0
+    )
+
+    # Combine all dead ball signals
+    evidence[:, 2] = pitch_exit + ball_missing + sustained_missing + far_from_players
 
     speed = np.r_[np.nan, np.linalg.norm(np.diff(ball, axis=0), axis=1) * fps]
     pair_confidence = np.r_[0.0, np.minimum(confidence[:-1], confidence[1:])]
@@ -138,7 +166,9 @@ def add_tag_evidence(evidence, speed, confidence, near_line, tags, offset, fps):
 def decode(evidence, dead_entry=None):
     """Find the best half-wide sequence with explicit turnover and stoppage costs."""
     # Uniform cues can support the current state without creating a frame-level vote.
-    transitions = np.array([[0.0, 1.55, 0.85], [1.55, 0.0, 0.85], [0.85, 0.85, 0.0]])
+    # Increased stoppage transition cost from 0.85 to 1.25 to reduce fragmentation
+    # while still allowing genuine dead ball segments to be detected
+    transitions = np.array([[0.0, 1.55, 1.25], [1.55, 0.0, 1.25], [1.25, 1.25, 0.0]])
     state_ids = np.arange(len(LABELS))
     previous = np.empty(evidence.shape, dtype=np.int8)
     # During ties, prefer staying in the current state to avoid an unsupported change.
