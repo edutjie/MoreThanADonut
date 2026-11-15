@@ -1,11 +1,13 @@
 const $ = (id) => document.getElementById(id);
 const video = $("video");
+const secondaryVideo = $("broadcast-video");
+const broadcastOnly = location.pathname === "/broadcast";
+const aligned = location.pathname === "/aligned";
 const canvas = $("timeline");
 const overlay = $("overlay");
 const scroll = $("scroll");
 const status = $("status");
 const ink = canvas.getContext("2d");
-const dots = overlay.getContext("2d");
 const RULER = 30;
 const ROW = 29;
 const palette = getComputedStyle(document.documentElement);
@@ -13,12 +15,15 @@ const colors = Object.fromEntries(
   Object.entries({ H: "home", A: "away", D: "dead", gap: "gap", ball: "ball" })
     .map(([key, name]) => [key, palette.getPropertyValue("--" + name).trim()])
 );
-const chunks = new Map();
 const recoveries = [];
-let match, bounds, publicWindow, frame = 0, zoom = 1, width = 0, durationFrames = 0;
+let match, broadcast, bounds, publicWindow, frame = 0, zoom = 1, width = 0, durationFrames = 0;
 let trackingError = "";
 let dataReady = false;
 let pointerFrame = null;
+let lastPair = null;
+let primaryWaiting = false;
+let paintPrimary = () => {};
+let paintSecondary = () => {};
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const number = (value) => value.toLocaleString("en-US");
@@ -69,7 +74,9 @@ function paintTimeline() {
       const size = Math.max(1, position(Math.min(to, end)) - x);
       const y = RULER + i * ROW + 5;
       ink.globalAlpha = track.kind === "gap" && i > 0 ? Math.min(1, 0.42 + value * 0.12) : 1;
-      ink.fillStyle = track.color || colors[track.kind === "gap" ? "gap" : value];
+      const color = track.kind === "ball-availability" ? (value === "Present" ? "ball" : "gap") :
+        track.kind === "gap" ? "gap" : value;
+      ink.fillStyle = track.color || colors[color];
       ink.fillRect(x, y, size, ROW - 10);
       ink.globalAlpha = 1;
       if ((track.kind === "gt" || track.kind === "prediction") && size >= 20) {
@@ -79,8 +86,9 @@ function paintTimeline() {
       }
     }
   }
-  const outside = [[0, match.halves[0][0]], [match.halves[0][1], match.halves[1][0]],
-    [match.halves[1][1], match.frames]];
+  const halves = match.halves;
+  const outside = halves ? [[0, halves[0][0]], [halves[0][1], halves[1][0]],
+    [halves[1][1], match.frames]] : [];
   for (const [from, to] of outside) {
     const left = position(Math.max(from, start));
     const right = position(Math.min(to, end));
@@ -129,7 +137,9 @@ function paintPlayhead() {
 function describe(track, index, row) {
   const span = spanAt(track.spans, index);
   if (span) {
-    if (row === 0) return "Missing";
+    if (track.kind === "alignment") return "Aligned";
+    if (track.kind === "ball-availability") return span[2];
+    if (track.kind === "gap" && row === 0) return "Missing";
     if (track.kind === "recovery") return "Recovered";
     if (track.kind === "gap") return `${span[2]} missing`;
     return span[2];
@@ -164,10 +174,44 @@ function updateFrame(index, follow = false) {
     const label = $("labels").children[row + 1].lastElementChild;
     const value = describe(track, frame, row);
     label.textContent = value;
-    label.style.color = value === "Recovered" ? track.color : colors[value] ||
+    label.style.color = value === "Recovered" ? track.color :
+      track.kind === "ball-availability" && value === "Present" ? colors.ball : colors[value] ||
       (value.includes("missing") && !value.startsWith("0") || value === "Missing" ? colors.gap : "");
   }
   if (pointerFrame === null) updateDetail(frame);
+  if (aligned && dataReady) syncBroadcast();
+}
+
+function syncBroadcast() {
+  const pair = spanAt(broadcast.pairs, frame);
+  const mapped = pair ? frame - pair[0] + pair[2] : null;
+  $("broadcast-frame").textContent = mapped === null ? "Unmapped" : `Frame ${number(mapped)}`;
+  const message = $("alignment-message");
+  if (mapped === null || secondaryVideo.error || !secondaryVideo.readyState) {
+    secondaryVideo.pause();
+    message.textContent = secondaryVideo.error ? "Broadcast video unavailable" :
+      mapped === null ? "No verified broadcast match at this frame" : "Loading broadcast video…";
+    message.hidden = false;
+    lastPair = null;
+    return;
+  }
+  const target = (mapped + .5) / match.fps;
+  const playing = !video.paused && !primaryWaiting && !video.seeking;
+  const secondaryFrame = Math.floor(secondaryVideo.currentTime * match.fps + .001);
+  if (pair !== lastPair || (!playing && secondaryFrame !== mapped)
+      || (playing && Math.abs(secondaryVideo.currentTime - target) > .12)) {
+    secondaryVideo.currentTime = target;
+  }
+  lastPair = pair;
+  message.textContent = "Synchronizing broadcast…";
+  message.hidden = !secondaryVideo.seeking && secondaryVideo.readyState >= 2;
+  if (playing && secondaryVideo.paused) {
+    secondaryVideo.play().catch((error) => {
+      if (error.name !== "AbortError") status.textContent = "Could not play the aligned broadcast video.";
+    });
+  } else if (!playing && !secondaryVideo.paused) {
+    secondaryVideo.pause();
+  }
 }
 
 function resizeCanvas(element, context, w, h) {
@@ -192,50 +236,68 @@ function resizeTimeline(anchor = frame, fraction = .5) {
   paintTimeline();
 }
 
-function loadChunk(index) {
-  if (chunks.has(index)) return;
-  if (chunks.size >= 12) chunks.delete(chunks.keys().next().value);
-  chunks.set(index, null);
-  fetch("/positions/" + index)
-    .then((response) => {
-      if (!response.ok) throw new Error("Could not load tracking coordinates");
-      return response.arrayBuffer();
-    })
-    .then((buffer) => {
-      if (!chunks.has(index)) return;
-      chunks.set(index, new Float32Array(buffer));
-      if (Math.floor(frame / match.chunk) === index) paintOverlay();
-    })
-    .catch((error) => {
-      trackingError = error.message;
-      reportStatus();
-    });
-}
-
 function reportStatus() {
-  status.textContent = trackingError || (dataReady ? `${number(match.frames)} frames · ${match.fps} fps · Raw tactical tracking` : "Loading tactical video…");
+  const broadcastTracking = broadcast?.teams ? " · Broadcast ATD overlay" : " · Broadcast ATD unavailable";
+  const source = broadcastOnly || aligned
+    ? `${number(broadcast.mappedFrames)} verified frame pairs · H/A/D labels from the tactical timeline${broadcastTracking}`
+    : "Raw tactical tracking";
+  status.textContent = trackingError || (dataReady ? `${number(match.frames)} frames · ${match.fps} fps · ${source}` : "Loading video…");
 }
 
-function paintOverlay() {
-  const w = overlay.clientWidth;
-  const h = overlay.clientHeight;
-  dots.clearRect(0, 0, w, h);
-  if (!dataReady || video.seeking) return;
-  const chunk = Math.floor(frame / match.chunk);
-  loadChunk(chunk);
-  if (!video.paused && frame % match.chunk > match.chunk - 50 &&
-      (chunk + 1) * match.chunk < match.frames) loadChunk(chunk + 1);
-  const points = chunks.get(chunk);
-  if (!points) return;
-  const ballIndex = match.teams.length;
-  const n = ballIndex + 1 + recoveries.length;
-  const offset = (frame % match.chunk) * n * 2;
-  const sx = w / video.videoWidth;
-  const sy = h / video.videoHeight;
+function trackingOverlay(element, player, feed, path, extra, currentFrame) {
+  const context = element.getContext("2d");
+  const chunks = new Map();
+  const loadChunk = (index) => {
+    if (chunks.has(index)) return;
+    if (chunks.size >= 12) chunks.delete(chunks.keys().next().value);
+    const request = fetch(path + index)
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not load tracking coordinates");
+        return response.arrayBuffer();
+      })
+      .then((buffer) => {
+        if (chunks.get(index) !== request) return;
+        chunks.set(index, new Float32Array(buffer));
+        if (Math.floor(currentFrame() / feed.chunk) === index) paint();
+      })
+      .catch((error) => {
+        trackingError = error.message;
+        reportStatus();
+      });
+    chunks.set(index, request);
+  };
+  function paint() {
+    const w = element.clientWidth;
+    const h = element.clientHeight;
+    context.clearRect(0, 0, w, h);
+    if (!dataReady || player.seeking || !player.videoWidth) return;
+    const index = currentFrame();
+    if (index < 0 || index >= feed.frames) return;
+    const chunk = Math.floor(index / feed.chunk);
+    loadChunk(chunk);
+    if (!player.paused && index % feed.chunk > feed.chunk - 50 &&
+        (chunk + 1) * feed.chunk < feed.frames) loadChunk(chunk + 1);
+    const points = chunks.get(chunk);
+    if (!(points instanceof Float32Array)) return;
+    drawTracking(context, points, index % feed.chunk, feed.teams, extra, w, h, player);
+  }
+  new ResizeObserver(() => {
+    resizeCanvas(element, context, element.clientWidth, element.clientHeight);
+    paint();
+  }).observe(element);
+  return paint;
+}
+
+function drawTracking(dots, points, index, teams, extra, w, h, player) {
+  const ballIndex = teams.length;
+  const n = ballIndex + 1 + extra.length;
+  const offset = index * n * 2;
+  const sx = w / player.videoWidth;
+  const sy = h / player.videoHeight;
   for (let i = 0; i < n; i++) {
     const ball = i >= ballIndex;
-    const recovery = recoveries[i - ballIndex - 1];
-    const team = ball ? "ball" : match.teams[i] === 0 ? "home" : "away";
+    const recovery = extra[i - ballIndex - 1];
+    const team = ball ? "ball" : teams[i] === 0 ? "home" : "away";
     if (!(recovery?.toggle ?? $(team)).checked) continue;
     const x = points[offset + i * 2] * sx;
     const y = points[offset + i * 2 + 1] * sy;
@@ -265,10 +327,15 @@ function paintOverlay() {
   }
 }
 
+function paintOverlay() {
+  paintPrimary();
+  paintSecondary();
+}
+
 function renderVideoAt(seconds, follow = false) {
   if (!Number.isFinite(seconds)) return;
   updateFrame(Math.floor(seconds * match.fps + .001), follow);
-  paintOverlay();
+  paintPrimary();
 }
 
 function seek(index, reveal = false) {
@@ -280,7 +347,7 @@ function seek(index, reveal = false) {
   }
   video.currentTime = (target + .5) / match.fps;
   updateFrame(target);
-  paintOverlay();
+  paintPrimary();
 }
 
 function setView(showPublic, anchor = frame) {
@@ -305,9 +372,65 @@ function pointerMove(event) {
 }
 
 async function main() {
-  const response = await fetch("/match.json");
+  const title = broadcastOnly ? "Broadcast Timeline" : aligned ? "Aligned Feeds" : "Tactical Timeline";
+  $("title").textContent = title;
+  document.title = title + " · MoreThanADonut";
+  document.querySelector(".feeds [aria-current]").removeAttribute("aria-current");
+  document.querySelector(`.feeds a[href="${location.pathname}"]`)?.setAttribute("aria-current", "page");
+  const response = await fetch(broadcastOnly ? "/broadcast.json" : "/match.json");
+  if (!response.ok && broadcastOnly) throw new Error("Broadcast view requires the local MP4 and a verified frame map.");
   if (!response.ok) throw new Error("Could not load the match timeline");
   match = await response.json();
+  if (broadcastOnly || aligned) {
+    if (broadcastOnly) {
+      broadcast = match;
+      document.querySelector(".overlays").hidden = !broadcast.teams;
+      $("gap-legend").hidden = !broadcast.alignedBall;
+      $("outside-legend").hidden = true;
+      video.setAttribute("aria-label", "Broadcast match footage");
+    } else {
+      const response = await fetch("/broadcast.json");
+      if (!response.ok) throw new Error("Aligned view requires the local broadcast MP4 and a verified frame map.");
+      broadcast = await response.json();
+      if (broadcast.alignedBall) match.tracks.splice(1, 0, broadcast.alignedBall);
+      $("primary-caption").hidden = false;
+      $("secondary").hidden = false;
+      document.querySelector(".screens").classList.add("aligned");
+      if (broadcast.teams) {
+        let displayed = -1;
+        const paint = trackingOverlay($("broadcast-overlay"), secondaryVideo, broadcast,
+          "/broadcast-positions/", [], () => displayed);
+        paintSecondary = paint;
+        const showFrame = (seconds) => {
+          displayed = Math.floor(seconds * broadcast.fps + .001);
+          paint();
+        };
+        secondaryVideo.addEventListener("seeking", () => {
+          displayed = -1;
+          paint();
+        });
+        secondaryVideo.addEventListener("seeked", () => showFrame(secondaryVideo.currentTime));
+        if ("requestVideoFrameCallback" in secondaryVideo) {
+          const onFrame = (_now, { mediaTime }) => {
+            if (!secondaryVideo.seeking) showFrame(mediaTime);
+            secondaryVideo.requestVideoFrameCallback(onFrame);
+          };
+          secondaryVideo.requestVideoFrameCallback(onFrame);
+        } else {
+          secondaryVideo.addEventListener("timeupdate", () => showFrame(secondaryVideo.currentTime));
+        }
+      }
+      for (const event of ["loadeddata", "seeked", "error"]) {
+        secondaryVideo.addEventListener(event, () => { if (dataReady) syncBroadcast(); });
+      }
+      secondaryVideo.src = "/broadcast.mp4";
+    }
+    const spans = broadcast.pairs.map(([first, stop, start]) => broadcastOnly
+      ? [start, start + stop - first, 1] : [first, stop, 1]);
+    match.tracks.push({ name: "Live alignment", kind: "alignment", color: palette.getPropertyValue("--alignment"), spans });
+    $("alignment-legend").hidden = false;
+    $("ball-availability-legend").hidden = !broadcast.alignedBall;
+  }
   for (const [index, track] of match.tracks.filter((item) => item.kind === "recovery").entries()) {
     const label = document.createElement("label");
     label.style.color = track.color;
@@ -318,6 +441,10 @@ async function main() {
     label.append(toggle, track.name);
     document.querySelector(".overlays").append(label);
     recoveries.push({ toggle, color: track.color, radius: 8 + index * 4 });
+  }
+  if (match.teams) {
+    paintPrimary = trackingOverlay(overlay, video, match,
+      broadcastOnly ? "/broadcast-positions/" : "/positions/", recoveries, () => frame);
   }
   const gt = match.tracks.find((track) => track.kind === "gt").spans;
   publicWindow = gt.length ? [gt[0][0], gt.at(-1)[1]] : null;
@@ -378,7 +505,7 @@ async function main() {
   };
   for (const id of ["ball", "home", "away"]) $(id).onchange = paintOverlay;
   document.addEventListener("keydown", (event) => {
-    if (event.target.matches("input, button")) return;
+    if (event.target.matches("input, button, a")) return;
     if (event.code === "Space") togglePlay();
     else if (event.key === "ArrowLeft") step(-1);
     else if (event.key === "ArrowRight") step(1);
@@ -387,7 +514,7 @@ async function main() {
   });
   video.addEventListener("loadedmetadata", () => {
     if (Math.abs(video.duration * match.fps - match.frames) > 1) {
-      status.textContent = "Tactical video duration does not match the tracking frame count.";
+      status.textContent = "Video duration does not match the expected frame count.";
       return;
     }
     dataReady = true;
@@ -397,8 +524,22 @@ async function main() {
   });
   video.addEventListener("play", () => { $("play").textContent = "Pause"; });
   video.addEventListener("pause", () => { $("play").textContent = "Play"; });
-  video.addEventListener("seeking", paintOverlay);
+  video.addEventListener("seeking", () => {
+    paintPrimary();
+    if (aligned) {
+      secondaryVideo.pause();
+      $("alignment-message").hidden = false;
+    }
+  });
   video.addEventListener("seeked", () => renderVideoAt(video.currentTime));
+  if (aligned) {
+    for (const event of ["playing", "waiting", "pause"]) {
+      video.addEventListener(event, () => {
+        primaryWaiting = event === "waiting";
+        if (dataReady) syncBroadcast();
+      });
+    }
+  }
   if ("requestVideoFrameCallback" in video) {
     const onFrame = (_now, { mediaTime }) => {
       if (!video.seeking && dataReady) renderVideoAt(mediaTime, !video.paused);
@@ -413,13 +554,9 @@ async function main() {
     requestAnimationFrame(tick);
   }
   video.addEventListener("error", () => {
-    status.textContent = "Could not play the tactical MP4. Check that it is available locally and that your browser supports H.264.";
+    status.textContent = "Could not play the MP4. Check that it is available locally and that your browser supports H.264.";
   });
-  new ResizeObserver(() => {
-    resizeCanvas(overlay, dots, overlay.clientWidth, overlay.clientHeight);
-    paintOverlay();
-  }).observe(overlay);
-  video.src = "/video.mp4";
+  video.src = broadcastOnly ? "/broadcast.mp4" : "/video.mp4";
   reportStatus();
 }
 

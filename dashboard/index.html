@@ -11,15 +11,32 @@
 </head>
 <body>
   <header class="top">
-    <h1>Tactical Timeline</h1>
+    <h1 id="title">Tactical Timeline</h1>
     <p>FC Barcelona <span>vs</span> Athletic Club</p>
-    <span class="local">Local viewer</span>
+    <nav class="feeds" aria-label="Match views">
+      <a href="/" aria-current="page">Tactical</a>
+      <a href="/broadcast">Broadcast</a>
+      <a href="/aligned">Aligned</a>
+    </nav>
   </header>
   <main>
-    <section class="monitor" aria-label="Tactical video">
-      <div class="stage">
-        <video id="video" preload="metadata" playsinline aria-label="Tactical match footage"></video>
-        <canvas id="overlay" aria-hidden="true"></canvas>
+    <section class="monitor" aria-label="Match video">
+      <div class="screens">
+        <div class="screen">
+          <div class="feed-caption" id="primary-caption" hidden>Tactical</div>
+          <div class="stage">
+            <video id="video" preload="metadata" playsinline aria-label="Tactical match footage"></video>
+            <canvas id="overlay" class="position-overlay" aria-hidden="true"></canvas>
+          </div>
+        </div>
+        <div class="screen" id="secondary" hidden>
+          <div class="feed-caption">Broadcast <output id="broadcast-frame"></output></div>
+          <div class="stage">
+            <video id="broadcast-video" preload="metadata" playsinline muted aria-label="Aligned broadcast match footage"></video>
+            <canvas id="broadcast-overlay" class="position-overlay" aria-hidden="true"></canvas>
+            <p id="alignment-message">No verified broadcast match at this frame</p>
+          </div>
+        </div>
       </div>
       <div class="transport">
         <button id="previous" aria-label="Previous frame" title="Previous frame (←)">−1</button>
@@ -38,7 +55,7 @@
       <div class="toolbar">
         <h2 id="timeline-heading">Timeline</h2>
         <div class="views">
-          <button id="full" aria-pressed="true">Full match</button>
+          <button id="full" aria-pressed="true">Full recording</button>
           <button id="public" aria-pressed="false">Public 5 min</button>
           <div class="zoom">
             <button id="out" aria-label="Zoom out" title="Zoom out">−</button>
@@ -62,8 +79,10 @@
         <span class="home">H · Barcelona</span>
         <span class="away">A · Athletic</span>
         <span class="dead">D · Dead ball</span>
-        <span class="gap">Tracking gap</span>
-        <span class="outside">Outside match halves</span>
+        <span class="gap" id="gap-legend">Tracking gap</span>
+        <span class="ball" id="ball-availability-legend" hidden>Broadcast ball present</span>
+        <span class="outside" id="outside-legend">Outside match halves</span>
+        <span class="alignment" id="alignment-legend" hidden>Verified live alignment</span>
       </footer>
     </section>
     <p id="status" role="status">Loading match data…</p>
