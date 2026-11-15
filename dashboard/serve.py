@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import numpy as np
 
-from games import DATA_DIR, GAME, GAMES, half_video_blocks, require, source_frames
+from games import DATA_DIR, GAME, GAMES, asset_paths, half_video_blocks, require, source_frames
 from starter.baseline import team_of_each_track
 from starter.load_homography import check_alignment, load, project
 from tactical_baseline import read_tracking
@@ -19,6 +19,7 @@ from tactical_baseline import read_tracking
 ROOT = Path(__file__).resolve().parent.parent
 CHUNK = 256
 RECOVERY_COLORS = ("#8fe4ab", "#6faeff", "#df9df2", "#f6c46e")
+BROADCAST_MAP = ROOT / "submissions/frozen-broadcast/frame-map.npz"
 
 
 def bundle_path():
@@ -80,21 +81,16 @@ def recovery_pixels(path, observed_ball, in_play, matrices, valid):
     return pixels, recovered
 
 
-def match_data(data_dir, predictions, recoveries=()):
-    meta, raw, video = require(["atd_meta", "atd_raw", "video"], data_dir=data_dir)
-    n_frames = source_frames()
+def tracking_pixels(data_dir, source):
+    meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir, source=source)
+    n_frames = source_frames(source)
     teams = team_of_each_track(meta)
     pitch = np.asarray(GAMES[GAME]["pitch"], dtype=np.float32)
     normalized = read_tracking(raw, n_frames, len(teams), pitch) / pitch
     observed = np.isfinite(normalized).all(axis=-1)
-    in_play = np.zeros(n_frames, dtype=bool)
-    halves = [[first, last + 1] for _, first, last in half_video_blocks(GAME)]
-    for first, stop in halves:
-        in_play[first:stop] = True
-
-    if not check_alignment(data_dir=data_dir)["agrees"]:
-        raise ValueError("Homography rows do not match tactical video frames")
-    matrices, _, valid = load(data_dir=data_dir)
+    if not check_alignment(data_dir=data_dir, source=source)["agrees"]:
+        raise ValueError(f"Homography rows do not match {source} tracking frames")
+    matrices, _, valid = load(data_dir=data_dir, source=source)
     pixels = np.full(normalized.shape, np.nan, dtype="<f4")
     for start in range(0, n_frames, 4096):
         span = slice(start, start + 4096)
@@ -104,6 +100,17 @@ def match_data(data_dir, predictions, recoveries=()):
                            points[..., 0], points[..., 1])
         pixels[span] = np.stack((x, y), axis=-1)
     pixels[~(valid[:, None] & observed)] = np.nan
+    return teams, observed, matrices, valid, pixels
+
+
+def match_data(data_dir, predictions, recoveries=()):
+    video, = require(["video"], data_dir=data_dir)
+    n_frames = source_frames()
+    teams, observed, matrices, valid, pixels = tracking_pixels(data_dir, "tactical")
+    in_play = np.zeros(n_frames, dtype=bool)
+    halves = [[first, last + 1] for _, first, last in half_video_blocks(GAME)]
+    for first, stop in halves:
+        in_play[first:stop] = True
 
     gt = ROOT / "evaluation" / "gt" / f"{GAME}_possession_gt_public.csv"
     tracks = [
@@ -130,10 +137,44 @@ def match_data(data_dir, predictions, recoveries=()):
     return info, pixels, Path(video)
 
 
-def handler_for(info, pixels, video):
+def broadcast_data(path, info):
+    # The supplied MP4 ends one frame before the broadcast tracking feed.
+    frames = source_frames("broadcast") - 1
+    with np.load(path, allow_pickle=False) as archive:
+        mapping = archive["tactical_frame"]
+    if (mapping.shape not in {(frames,), (frames + 1,)} or mapping.dtype.kind != "i"
+            or np.any((mapping < -1) | (mapping >= info["frames"]))):
+        raise ValueError("Invalid broadcast-to-tactical frame map")
+    mapping = mapping[:frames]
+    broadcast = np.flatnonzero(mapping >= 0)
+    tactical = mapping[broadcast]
+    if not len(tactical) or np.any(np.diff(tactical) <= 0):
+        raise ValueError("Broadcast frame map must contain increasing tactical frames")
+    cuts = np.flatnonzero((np.diff(broadcast) != 1) | (np.diff(tactical) != 1)) + 1
+    starts, ends = np.r_[0, cuts], np.r_[cuts - 1, len(tactical) - 1]
+    # Runs pair equally long, consecutive spans on each native frame axis.
+    pairs = np.stack((tactical[starts], tactical[ends] + 1, broadcast[starts]), axis=1).tolist()
+    tracks = []
+    for track in info["tracks"]:
+        if track["kind"] not in {"gt", "prediction"}:
+            continue
+        labels = np.full(info["frames"], "X", dtype="U1")
+        for start, stop, label in track["spans"]:
+            labels[start:stop] = label
+        mapped = np.full(frames, "X", dtype="U1")
+        mapped[broadcast] = labels[tactical]
+        tracks.append({**track, "spans": runs(mapped.tolist(), "X")})
+    return {"frames": frames, "fps": info["fps"], "tracks": tracks, "pairs": pairs,
+            "mappedFrames": len(tactical)}
+
+
+def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broadcast_pixels=None):
     manifest = json.dumps(info, separators=(",", ":")).encode()
+    broadcast_manifest = json.dumps(broadcast, separators=(",", ":")).encode()
     static = {
         "/": ("text/html; charset=utf-8", "index.html"),
+        "/broadcast": ("text/html; charset=utf-8", "index.html"),
+        "/aligned": ("text/html; charset=utf-8", "index.html"),
         "/style.css": ("text/css; charset=utf-8", "style.css"),
         "/app.js": ("text/javascript; charset=utf-8", "app.js"),
     }
@@ -153,20 +194,26 @@ def handler_for(info, pixels, video):
             path = urlsplit(self.path).path
             try:
                 if path == "/video.mp4":
-                    self.stream_video(send_body)
+                    self.stream_video(video, send_body)
+                    return
+                if path == "/broadcast.mp4" and broadcast_video:
+                    self.stream_video(broadcast_video, send_body)
                     return
                 if path == "/match.json":
                     mime, body = "application/json", manifest
+                elif path == "/broadcast.json" and broadcast is not None:
+                    mime, body = "application/json", broadcast_manifest
                 elif path in static:
                     mime, filename = static[path]
                     body = (Path(__file__).parent / filename).read_bytes()
-                elif match := re.fullmatch(r"/positions/([0-9]{1,8})", path):
-                    start = int(match[1]) * CHUNK
-                    if start >= info["frames"]:
+                elif match := re.fullmatch(r"/(positions|broadcast-positions)/([0-9]{1,8})", path):
+                    positions = pixels if match[1] == "positions" else broadcast_pixels
+                    start = int(match[2]) * CHUNK
+                    if positions is None or start >= len(positions):
                         self.send_error(404)
                         return
                     mime = "application/octet-stream"
-                    body = pixels[start:start + CHUNK].tobytes()
+                    body = positions[start:start + CHUNK].tobytes()
                 else:
                     self.send_error(404)
                     return
@@ -180,9 +227,9 @@ def handler_for(info, pixels, video):
             except (BrokenPipeError, ConnectionResetError):
                 pass  # Scrubbing often cancels an in-progress video range.
 
-        def stream_video(self, send_body):
-            with video.open("rb") as source:
-                size = video.stat().st_size
+        def stream_video(self, path, send_body):
+            with path.open("rb") as source:
+                size = path.stat().st_size
                 start, stop = 0, size
                 request_range = self.headers.get("Range")
                 if request_range:
@@ -235,6 +282,8 @@ def main():
     parser.add_argument("--recovery-track", action="append", nargs=2, metavar=("NAME", "CSV"), default=[],
                         help="named ball-recovery track, repeat to compare checkpoints")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--broadcast-map", type=Path, default=BROADCAST_MAP,
+                        help="broadcast-to-tactical NPZ from broadcast_alignment.py")
     args = parser.parse_args()
     files = args.prediction or [("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv")]
     try:
@@ -244,7 +293,32 @@ def main():
         if args.recovery is not None:
             recoveries.insert(0, ("YOLO ball recovery", args.recovery))
         info, pixels, video = match_data(args.data_dir, predictions, recoveries)
-        with ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(info, pixels, video)) as server:
+        broadcast_video = Path(asset_paths(data_dir=args.data_dir, source="broadcast")["video"])
+        broadcast = None
+        broadcast_pixels = None
+        if broadcast_video.is_file() and args.broadcast_map.is_file():
+            try:
+                broadcast = broadcast_data(args.broadcast_map, info)
+            except (OSError, KeyError, ValueError) as error:
+                print(f"Broadcast views unavailable: {error}", flush=True)
+        if broadcast is not None:
+            try:
+                print("Loading broadcast tracking…", flush=True)
+                teams, observed, _, _, positions = tracking_pixels(args.data_dir, "broadcast")
+                broadcast_pixels = positions[:broadcast["frames"]]
+                broadcast.update(teams=teams.tolist(), chunk=CHUNK)
+                ball = np.where(observed[:broadcast["frames"], -1], "Present", "Missing")
+                ball_track = {"name": "Broadcast ball", "kind": "ball-availability"}
+                broadcast["tracks"].insert(0, {**ball_track, "spans": runs(ball.tolist(), "")})
+                aligned_ball = np.full(info["frames"], "", dtype=ball.dtype)
+                for start, stop, native_start in broadcast["pairs"]:
+                    aligned_ball[start:stop] = ball[native_start:native_start + stop - start]
+                broadcast["alignedBall"] = {**ball_track, "spans": runs(aligned_ball.tolist(), "")}
+            except (OSError, ValueError) as error:
+                print(f"Broadcast overlays unavailable: {error}", flush=True)
+        with ThreadingHTTPServer(("127.0.0.1", args.port),
+                                 handler_for(info, pixels, video, broadcast, broadcast_video,
+                                             broadcast_pixels)) as server:
             print(f"Tactical dashboard → http://127.0.0.1:{server.server_port}", flush=True)
             server.serve_forever()
     except (OSError, ValueError) as error:
