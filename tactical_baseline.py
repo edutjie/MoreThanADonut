@@ -186,7 +186,7 @@ def decode(evidence, dead_entry=None):
     # Uniform cues can support the current state without creating a frame-level vote.
     # Increased stoppage transition cost from 0.85 to 1.25 to reduce fragmentation
     # while still allowing genuine dead ball segments to be detected
-    transitions = np.array([[0.0, 1.55, 1.25], [1.55, 0.0, 1.25], [1.25, 1.25, 0.0]])
+    transitions = np.array([[0.0, 1.55, 1.60], [1.55, 0.0, 1.60], [1.60, 1.60, 0.0]])
     state_ids = np.arange(len(LABELS))
     previous = np.empty(evidence.shape, dtype=np.int8)
     # During ties, prefer staying in the current state to avoid an unsupported change.
