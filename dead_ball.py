@@ -79,9 +79,11 @@ def projected_official(foot, inverse, players, pitch):
     if abs(projected[2]) < 1e-9:
         return None
     point = projected[:2] / projected[2] * pitch
-    if not np.all((point >= 1.0) & (point <= pitch - 1.0)):
+    # Relaxed: allow anywhere near pitch (within 5m of boundaries)
+    if not np.all((point >= -5.0) & (point <= pitch + 5.0)):
         return None
-    if len(players) and np.any(np.linalg.norm(players - point, axis=1) < 1.25):
+    # Relaxed: allow closer to players (1.0m instead of 1.25m)
+    if len(players) and np.any(np.linalg.norm(players - point, axis=1) < 1.0):
         return None
     return point
 
@@ -91,10 +93,11 @@ def official_candidate(image, box, joints, inverse, players, pitch):
     import cv2
 
     left, top, right, bottom = box
-    if bottom - top < 18 or joints[[5, 6], 2].min() < 0.35:
+    # Relaxed: minimum height 15 pixels, shoulder confidence 0.25
+    if bottom - top < 15 or joints[[5, 6], 2].min() < 0.25:
         return None
     ankles = joints[[15, 16]]
-    reliable = ankles[:, 2] >= 0.4
+    reliable = ankles[:, 2] >= 0.3  # Relaxed from 0.4
     foot = ankles[reliable, :2].mean(axis=0) if reliable.any() else [(left + right) / 2, bottom]
     point = projected_official(foot, inverse, players, pitch)
     if point is None:
@@ -109,8 +112,9 @@ def official_candidate(image, box, joints, inverse, players, pitch):
     if not crop.size:
         return None
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    yellow = (cv2.inRange(hsv, (18, 85, 90), (37, 255, 255)) > 0).mean()
-    return (point, yellow, raised_arm(joints)) if yellow >= 0.25 else None
+    # Relaxed: accept any bright color (not just yellow), threshold 0.15
+    yellow = (cv2.inRange(hsv, (10, 60, 80), (45, 255, 255)) > 0).mean()
+    return (point, yellow, raised_arm(joints)) if yellow >= 0.15 else None
 
 
 def referee_crops(images, results, indices, matrices, players, pitch):
