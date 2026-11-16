@@ -250,7 +250,30 @@ def measure(model, matches, costs):
         yield match_id, np.mean(baseline), np.mean(learned, axis=0)
 
 
-def train(root, output, workers):
+def classifier(backend, workers):
+    if backend == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        return LGBMClassifier(objective="multiclass", n_estimators=100, num_leaves=31,
+                              learning_rate=0.1, random_state=0, n_jobs=workers,
+                              deterministic=True, force_col_wise=True, verbosity=-1)
+    if backend == "xgboost":
+        from xgboost import XGBClassifier
+
+        return XGBClassifier(objective="multi:softprob", n_estimators=100, max_depth=0,
+                             max_leaves=31, grow_policy="lossguide", learning_rate=0.1,
+                             tree_method="hist", random_state=0, n_jobs=workers)
+    if backend == "catboost":
+        from catboost import CatBoostClassifier
+
+        return CatBoostClassifier(loss_function="MultiClass", iterations=100, depth=5,
+                                  learning_rate=0.1, random_seed=0, thread_count=workers,
+                                  verbose=False, allow_writing_files=False)
+    return HistGradientBoostingClassifier(max_iter=100, max_leaf_nodes=31,
+                                          early_stopping=False, random_state=0)
+
+
+def train(root, output, workers, backend="hist"):
     match_ids = sorted(int(match["id"]) for match in json.loads((root / "matches.json").read_text()))
     if not (TEST_MATCHES | DEV_MATCHES).issubset(match_ids):
         raise ValueError("pinned SkillCorner development or test matches are missing")
@@ -260,9 +283,8 @@ def train(root, output, workers):
         fitted = [half for future in futures for half in future.result()]
         features = np.concatenate([x for x, _ in fitted])
         labels = np.concatenate([y for _, y in fitted])
-        print(f"Training on {len(features):,} rows from matches {train_ids}", flush=True)
-        model = HistGradientBoostingClassifier(max_iter=100, max_leaf_nodes=31,
-                                               early_stopping=False, random_state=0)
+        print(f"Training {backend} on {len(features):,} rows from matches {train_ids}", flush=True)
+        model = classifier(backend, workers)
         with threadpool_limits(limits=workers):
             model.fit(features, labels)
         del fitted, features, labels, futures
@@ -334,6 +356,7 @@ def main():
     training.add_argument("--skillcorner", type=Path, required=True)
     training.add_argument("--model", type=Path, required=True)
     training.add_argument("--workers", type=int, default=4)
+    training.add_argument("--backend", choices=["hist", "lightgbm", "xgboost", "catboost"], default="hist")
     inference = subcommands.add_parser("predict")
     inference.add_argument("--model", type=Path, required=True)
     inference.add_argument("--data-dir", type=Path)
@@ -343,7 +366,7 @@ def main():
     transfer.add_argument("--model", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "train":
-        train(args.skillcorner, args.model, args.workers)
+        train(args.skillcorner, args.model, args.workers, args.backend)
     elif args.command == "predict":
         predict(args.model, args.data_dir, args.output)
     else:

@@ -42,6 +42,20 @@ The held-out gains were positive on all four matches. On the same development
 split, the learned classifier with zero transition costs scored 0.2845,
 showing the effect of decoding entire spells.
 
+### Boosting backends
+
+The follow-up reused the same split, feature matrix, augmentation and decoder
+cost grid. Every backend ran 100 boosting rounds at learning rate 0.1. The
+three alternatives were evaluated on the external games. The contest dashboard
+uses the original frozen model.
+
+| Backend | Turnover, stoppage | Development spellF1 | Held-out spellF1 |
+| --- | --- | ---: | ---: |
+| Histogram gradient boosting | 10, 10 | 0.6902 | 0.6578 |
+| LightGBM 4.7.0 | 5, 10 | 0.6865 | 0.6563 |
+| XGBoost 3.4.1 | 5, 10 | 0.6835 | 0.6489 |
+| CatBoost 1.2.10 | 10, 10 | 0.6516 | 0.6333 |
+
 The frozen A-League model was also tested on seven IDSSE Bundesliga matches
 with official per-frame possession and ball-status labels. Synthetic ball
 dropouts used a mean gap of 12 seconds and expected visibility of 60%.
@@ -101,11 +115,21 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=6 python external_possession.py train \
   --model data/external_possession/skillcorner-4340d27.joblib --workers 6
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python external_possession.py predict \
   --model data/external_possession/skillcorner-4340d27.joblib \
-  --output data/external_possession/candidate/possession.csv
-python evaluation/validate_submission.py data/external_possession/candidate/possession.csv
+  --output data/external_possession/skillcorner-frozen/possession.csv
+python evaluation/validate_submission.py data/external_possession/skillcorner-frozen/possession.csv
 python evaluation/run_evaluation.py --gt public --no-detail --bootstrap 0 \
-  --results data/external_possession/candidate \
+  --results data/external_possession/skillcorner-frozen \
   --out data/external_possession/public-check
+```
+
+To repeat the backend comparison, install the three versions listed above and run:
+
+```bash
+for backend in lightgbm xgboost catboost; do
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python external_possession.py train \
+    --skillcorner data/skillcorner-4340d27 --workers 5 --backend "$backend" \
+    --model "data/external_possession/$backend-4340d27.joblib"
+done
 ```
 
 The dataset, model and outputs are local artifacts. Load only a model you

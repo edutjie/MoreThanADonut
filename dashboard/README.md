@@ -14,6 +14,38 @@ and generate a prediction if needed. Replace the bundle path with your local fol
 Open [the dashboard](http://127.0.0.1:8765) in a browser with H.264 support.
 Use `--data-dir /path/to/bundle` if the bundle is stored elsewhere. Repeat
 `--prediction "Track name" /path/to/predictions.csv` to add other runs.
+
+## SkillCorner model and tracking replay
+
+The frozen histogram boosting model's 0.6578 spellF1 is the mean over four
+held-out A-League matches. Its contest timeline uses the separate 0.6250
+public-window check. When the frozen contest CSV is at
+`data/external_possession/skillcorner-frozen/possession.csv`, the dashboard
+loads it by default if no `--prediction` options are provided.
+
+See [External Possession](../EXTERNAL_POSSESSION.md) to build the model and
+generate the CSV at that path. Install Pillow and FFmpeg with H.264 encoding
+support to render the **SkillCorner** page's 20-second tracking animation.
+It shows the ball, both teams, the source labels, and the frozen model's
+predictions for one held-out Brisbane Roar–Perth Glory sample.
+
+```bash
+.venv/bin/python -m dashboard.render_skillcorner \
+  --skillcorner data/skillcorner-4340d27 \
+  --model data/external_possession/skillcorner-4340d27.joblib \
+  --output data/external_possession/skillcorner-sample.mp4
+
+.venv/bin/python -m dashboard.serve --port 8767 \
+  --prediction "v5 reference · 0.4914 public spellF1" evaluation/results/improved_dead_ball_v5.csv \
+  --prediction "SkillCorner model · 0.6250 public spellF1" data/external_possession/skillcorner-frozen/possession.csv
+```
+
+The server picks up the generated MP4 at that path. Pass `--skillcorner-sample`
+to use a different local copy. The SkillCorner Open Data grant covers tracking
+and labels. The sample page uses an animation of those coordinates.
+
+## Playback and overlay options
+
 To compare accepted recovery frames and their projected coordinates, add one
 `--recovery-track "Name" path.csv` per checkpoint:
 

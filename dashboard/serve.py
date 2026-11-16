@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CHUNK = 256
 RECOVERY_COLORS = ("#8fe4ab", "#6faeff", "#df9df2", "#f6c46e")
 BROADCAST_MAP = ROOT / "submissions/frozen-broadcast/frame-map.npz"
+FROZEN_PREDICTION = ROOT / "data/external_possession/skillcorner-frozen/possession.csv"
+SKILLCORNER_SAMPLE = ROOT / "data/external_possession/skillcorner-sample.mp4"
 
 
 def bundle_path():
@@ -168,13 +170,15 @@ def broadcast_data(path, info):
             "mappedFrames": len(tactical)}
 
 
-def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broadcast_pixels=None):
+def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broadcast_pixels=None,
+                skillcorner_video=None):
     manifest = json.dumps(info, separators=(",", ":")).encode()
     broadcast_manifest = json.dumps(broadcast, separators=(",", ":")).encode()
     static = {
         "/": ("text/html; charset=utf-8", "index.html"),
         "/broadcast": ("text/html; charset=utf-8", "index.html"),
         "/aligned": ("text/html; charset=utf-8", "index.html"),
+        "/skillcorner": ("text/html; charset=utf-8", "skillcorner.html"),
         "/style.css": ("text/css; charset=utf-8", "style.css"),
         "/app.js": ("text/javascript; charset=utf-8", "app.js"),
     }
@@ -198,6 +202,9 @@ def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broad
                     return
                 if path == "/broadcast.mp4" and broadcast_video:
                     self.stream_video(broadcast_video, send_body)
+                    return
+                if path == "/skillcorner.mp4" and skillcorner_video and skillcorner_video.is_file():
+                    self.stream_video(skillcorner_video, send_body)
                     return
                 if path == "/match.json":
                     mime, body = "application/json", manifest
@@ -284,8 +291,15 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--broadcast-map", type=Path, default=BROADCAST_MAP,
                         help="broadcast-to-tactical NPZ from broadcast_alignment.py")
+    parser.add_argument("--skillcorner-sample", type=Path, default=SKILLCORNER_SAMPLE,
+                        help="public tracking replay from dashboard.render_skillcorner")
     args = parser.parse_args()
-    files = args.prediction or [("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv")]
+    if args.prediction:
+        files = args.prediction
+    elif FROZEN_PREDICTION.is_file():
+        files = [("SkillCorner model · 0.6250 public spellF1", FROZEN_PREDICTION)]
+    else:
+        files = [("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv")]
     try:
         predictions = [(name, load_labels(Path(path), source_frames())) for name, path in files]
         print("Loading tracking and timeline…", flush=True)
@@ -318,7 +332,7 @@ def main():
                 print(f"Broadcast overlays unavailable: {error}", flush=True)
         with ThreadingHTTPServer(("127.0.0.1", args.port),
                                  handler_for(info, pixels, video, broadcast, broadcast_video,
-                                             broadcast_pixels)) as server:
+                                             broadcast_pixels, args.skillcorner_sample)) as server:
             print(f"Tactical dashboard → http://127.0.0.1:{server.server_port}", flush=True)
             server.serve_forever()
     except (OSError, ValueError) as error:
