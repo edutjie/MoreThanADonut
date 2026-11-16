@@ -28,7 +28,7 @@ IDSSE_FPS = 25
 LAG_SECONDS = (0.5, 1.0, 2.0, 4.0)
 
 
-def tracking_features(positions, weights, teams, pitch, fps, lags=()):
+def tracking_features(positions, weights, teams, pitch, fps, lags=(), *, continuous_motion=False):
     """Return shared features and the same team features in home/away order."""
     ball, confidence = fill_short_gaps(positions[:, -1], fps, weights)
     players = positions[:, :-1]
@@ -38,6 +38,11 @@ def tracking_features(positions, weights, teams, pitch, fps, lags=()):
     outside = np.maximum(-ball, ball - pitch).max(axis=1)
     visible = np.isfinite(players).all(axis=-1)
     frames = np.arange(len(ball))
+    if continuous_motion:
+        step = np.linalg.norm(np.diff(players, axis=0), axis=-1)
+        breaks = ~np.isfinite(step) | (step > max(1.0, 15 / fps))
+        continuity = np.zeros(visible.shape, dtype=np.int32)
+        np.cumsum(breaks, axis=0, out=continuity[1:])
 
     shared = [confidence, outside, distance.min(axis=1)]
     team_features = [[], []]
@@ -60,11 +65,15 @@ def tracking_features(positions, weights, teams, pitch, fps, lags=()):
             if short_backward:
                 lag_shared.append(ball_speed)
             player_speed = np.linalg.norm(players[other] - players, axis=-1) / elapsed[:, None]
+            if continuous_motion:
+                player_speed[continuity[other] != continuity] = np.nan
             for side, features in enumerate(team_features):
                 near = features[0]
                 side_speed = player_speed[:, teams == side]
                 count = np.isfinite(side_speed).sum(axis=1)
                 mean_speed = np.nansum(np.minimum(side_speed, 12), axis=1) / np.maximum(count, 1)
+                if continuous_motion:
+                    mean_speed[count == 0] = np.nan
                 features.extend([near[other], mean_speed])
                 if short_backward:
                     lag_teams[side].append(mean_speed)

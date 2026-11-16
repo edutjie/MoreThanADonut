@@ -19,6 +19,7 @@ from external_possession import (
 )
 from games import GAME, half_video_blocks
 from idsse_training import IDSSE_TEST
+from player_track_quality import corrupt_player_tracks, repair_player_tracks
 from possession_sources import LEGACY_MATCHES, load_legacy_skillcorner
 from starter.baseline import write_submission
 
@@ -97,35 +98,47 @@ def visibility_features(ball, fps):
     return np.column_stack((visible, age)).astype(np.float32)
 
 
-def sequence_features(positions, weights, teams, pitch, fps):
-    base, mirrored = tracking_features(positions, weights, teams, pitch, fps, LAG_SECONDS)
+def sequence_features(positions, weights, teams, pitch, fps, continuous_motion=False):
+    base, mirrored = tracking_features(positions, weights, teams, pitch, fps, LAG_SECONDS,
+                                      continuous_motion=continuous_motion)
     visibility = visibility_features(positions[:, -1], fps)
     return np.column_stack((base, visibility)), np.column_stack((mirrored, visibility))
 
 
-def training_halves(root, match, loader=load_skillcorner):
+def training_halves(root, match, loader=load_skillcorner, repair_players=False, continuous_motion=False):
     rng = np.random.default_rng(match)
     halves = []
     fps = SKILLCORNER_FPS
     for positions, weights, teams, pitch, labels in loader(root, match):
         augmented = short_ball_dropouts(positions, fps, rng)
+        if repair_players:
+            augmented = corrupt_player_tracks(augmented, pitch, fps, rng)
         for tracks in (positions, augmented):
-            x, mirrored = sequence_features(tracks, weights, teams, pitch, fps)
+            if repair_players:
+                tracks = repair_player_tracks(tracks, fps)
+            x, mirrored = sequence_features(tracks, weights, teams, pitch, fps, continuous_motion)
             halves.append((x, mirrored, labels))
     return halves
 
 
-def evaluation_halves(root, match, stress):
+def evaluation_halves(root, match, stress, repair_players=False, player_stress=False,
+                      continuous_motion=False):
     idsse = isinstance(match, str)
     fps = IDSSE_FPS if idsse else SKILLCORNER_FPS
     load = load_idsse if idsse else load_skillcorner
     rng = np.random.default_rng(int(match[1:], 36) if idsse else match)
+    player_rng = np.random.default_rng(int(match[1:], 36) if idsse else match)
     halves = []
     for positions, weights, teams, pitch, labels in load(root, match):
         if stress:
             positions = mask_ball(positions, fps, rng, mean_gap=12, coverage=0.60)
+        if player_stress:
+            positions = corrupt_player_tracks(positions, pitch, fps, player_rng)
+        if repair_players:
+            positions = repair_player_tracks(positions, fps)
         missing = ~np.isfinite(positions[:, -1]).all(axis=1)
-        halves.append((*sequence_features(positions, weights, teams, pitch, fps), labels, missing, fps))
+        halves.append((*sequence_features(positions, weights, teams, pitch, fps, continuous_motion),
+                       labels, missing, fps))
     return halves
 
 
@@ -192,7 +205,12 @@ def sequence_probabilities(model, normal, mirrored, fps, device):
 
 
 def score_half(p, labels, missing, fps):
-    pred = metrics.label_codes(decode_costs(np.log(np.maximum(p, 1e-6)), fps, *DECODER_COSTS))
+    prediction = decode_costs(np.log(np.maximum(p, 1e-6)), fps, *DECODER_COSTS)
+    return score_prediction(prediction, labels, missing, fps)
+
+
+def score_prediction(prediction, labels, missing, fps):
+    pred = metrics.label_codes(prediction)
     runs = metrics.valid_runs(labels)
     spells = metrics.spell_scores(labels, pred, runs)
     target = metrics.possession_spells(labels, runs)
@@ -238,12 +256,18 @@ def fit(args):
         raise ValueError("expected the frozen lagged LightGBM reference")
     args.output.mkdir(parents=True, exist_ok=True)
     with ProcessPoolExecutor(max_workers=args.workers, mp_context=get_context("spawn")) as pool:
-        jobs = [pool.submit(training_halves, args.skillcorner, match) for match in train_ids]
+        jobs = [pool.submit(training_halves, args.skillcorner, match, load_skillcorner,
+                            args.repair_players, args.continuous_motion) for match in train_ids]
         if args.legacy_skillcorner:
             jobs.extend(pool.submit(training_halves, args.legacy_skillcorner, match,
-                                    load_legacy_skillcorner) for match in LEGACY_MATCHES)
+                                    load_legacy_skillcorner, args.repair_players, args.continuous_motion)
+                        for match in LEGACY_MATCHES)
         development_jobs = [pool.submit(evaluation_halves, args.skillcorner, match, False)
                             for match in sorted(DEV_MATCHES)]
+        if args.repair_players:
+            repaired_dev = [pool.submit(evaluation_halves, args.skillcorner, match, False, True, stress,
+                                        args.continuous_motion)
+                            for stress in (False, True) for match in sorted(DEV_MATCHES)]
         primary = [half for job in jobs[:len(train_ids)] for half in job.result()]
         partial_start = len(primary)
         training = primary + [half for job in jobs[len(train_ids):] for half in job.result()]
@@ -251,6 +275,9 @@ def fit(args):
         if not args.conditional_legacy:
             partial_start = len(training)
         development = [job.result() for job in development_jobs]
+        if args.repair_players:
+            dev_records = [job.result() for job in repaired_dev]
+            del repaired_dev
         mean, scale = normalize(training)
         model = ARCHITECTURES[args.architecture](mean, scale).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=0.002, weight_decay=1e-3)
@@ -282,15 +309,19 @@ def fit(args):
                 optimizer.step()
                 losses.append(loss.detach())
             model.eval()
-            dev = evaluate(model, development, device)
+            dev = evaluate(model, dev_records if args.repair_players else development, device)
             dev["epoch"] = epoch
             history.append(dev)
             print(f"Epoch {epoch}: loss={torch.stack(losses).mean().item():.4f}, dev={dev}", flush=True)
             if dev["spell_f1"] > best:
                 best = dev["spell_f1"]
                 torch.save({"state": model.state_dict(), "epoch": epoch,
-                            "architecture": args.architecture}, checkpoint)
+                            "architecture": args.architecture,
+                            "repair_players": args.repair_players,
+                            "continuous_motion": args.continuous_motion}, checkpoint)
         del training, development, jobs, development_jobs
+        if args.repair_players:
+            del dev_records
         model, epoch = restore(checkpoint, device)
         print(f"Frozen {args.architecture} epoch {epoch}, development spellF1 {best:.4f}", flush=True)
         sets = [("A-League", args.skillcorner, sorted(TEST_MATCHES), False),
@@ -299,8 +330,12 @@ def fit(args):
         result = {}
         for name, root, split, stress in sets:
             records = list(pool.map(evaluation_halves, [root] * len(split), split, [stress] * len(split)))
-            result[name] = {"lightgbm": evaluate(reference, records),
-                            args.architecture: evaluate(model, records, device)}
+            ref_scores = evaluate(reference, records)
+            if args.repair_players:
+                records = list(pool.map(evaluation_halves, [root] * len(split), split,
+                                        [stress] * len(split), [True] * len(split),
+                                        [False] * len(split), [args.continuous_motion] * len(split)))
+            result[name] = {"lightgbm": ref_scores, args.architecture: evaluate(model, records, device)}
             print(f"Held-out {name}: {result[name]}", flush=True)
     (args.output / "benchmark.json").write_text(json.dumps(
         {"architecture": args.architecture, "selected_epoch": epoch,
@@ -315,6 +350,8 @@ def restore(path, device):
     state = payload["state"]
     model = ARCHITECTURES[payload.get("architecture", "gru")](state["mean"], state["scale"])
     model.load_state_dict(state)
+    model.repair_players = payload.get("repair_players", False)
+    model.continuous_motion = payload.get("continuous_motion", False)
     return model.to(device).eval(), payload["epoch"]
 
 
@@ -324,7 +361,10 @@ def predict(args):
     positions, teams, pitch, fps = contest_tracking(args.data_dir)
     labels = np.full(len(positions), "X")
     for _, start, last in half_video_blocks(GAME):
-        normal, mirrored = sequence_features(positions[start:last + 1], None, teams, pitch, fps)
+        tracks = positions[start:last + 1]
+        if model.repair_players:
+            tracks = repair_player_tracks(tracks, fps)
+        normal, mirrored = sequence_features(tracks, None, teams, pitch, fps, model.continuous_motion)
         p = sequence_probabilities(model, normal, mirrored, fps, device)
         labels[start:last + 1] = decode_costs(np.log(np.maximum(p, 1e-6)), fps, *DECODER_COSTS)
     write_submission(args.output, labels)
@@ -343,6 +383,10 @@ if __name__ == "__main__":
     training.add_argument("--reference", type=Path, required=True)
     training.add_argument("--workers", type=int, default=4)
     training.add_argument("--architecture", choices=ARCHITECTURES, default="gru")
+    training.add_argument("--repair-players", action="store_true",
+                          help="clean player tracks and simulate player tracking faults in training")
+    training.add_argument("--continuous-motion", action="store_true",
+                          help="compute speeds only within continuous player tracks")
     inference = commands.add_parser("predict")
     inference.add_argument("--model", type=Path, required=True)
     inference.add_argument("--data-dir", type=Path)
@@ -351,6 +395,8 @@ if __name__ == "__main__":
         command.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "train":
+        if args.continuous_motion and not args.repair_players:
+            parser.error("--continuous-motion requires --repair-players")
         if args.conditional_legacy and not args.legacy_skillcorner:
             parser.error("--conditional-legacy requires --legacy-skillcorner")
         fit(args)

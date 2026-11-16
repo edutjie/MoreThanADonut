@@ -18,6 +18,7 @@ from external_possession import (
 )
 from games import GAME, half_video_blocks
 from idsse_training import IDSSE_DEV, IDSSE_TEST, IDSSE_TRAIN
+from player_track_quality import repair_player_tracks
 from possession_sources import load_legacy_skillcorner
 from sequence_possession import DECODER_COSTS, restore, sequence_probabilities, visibility_features
 from starter.baseline import write_submission
@@ -64,13 +65,7 @@ def log_odds(p):
     return np.log(p / (1 - p))
 
 
-def predictions(reference, specialists, block, fps, device, policies):
-    positions, weights, teams, pitch, _ = block
-    inside, _ = observed(positions, weights, pitch, fps)
-    x, flipped = tracking_features(positions, weights, teams, pitch, fps, LAG_SECONDS)
-    visibility = visibility_features(positions[:, -1], fps)
-    p = sequence_probabilities(reference, np.column_stack((x, visibility)),
-                               np.column_stack((flipped, visibility)), fps, device)
+def blended_emissions(p, x, flipped, inside, specialists, policies):
     base = np.log(np.maximum(p, 1e-6))
     delta = {}
     for name in {name for name, strength in policies if strength}:
@@ -82,6 +77,21 @@ def predictions(reference, specialists, block, fps, device, policies):
         emission = base.copy()
         if strength:
             emission[inside, metrics.D] += strength * delta[name]
+        yield emission
+
+
+def predictions(reference, specialists, block, fps, device, policies):
+    positions, weights, teams, pitch, _ = block
+    if reference.repair_players:
+        positions = repair_player_tracks(positions, fps)
+    inside, _ = observed(positions, weights, pitch, fps)
+    x, flipped = tracking_features(positions, weights, teams, pitch, fps, LAG_SECONDS)
+    motion = tracking_features(positions, weights, teams, pitch, fps, LAG_SECONDS,
+                               continuous_motion=True) if reference.continuous_motion else (x, flipped)
+    visibility = visibility_features(positions[:, -1], fps)
+    normal, mirrored = (np.column_stack((features, visibility)) for features in motion)
+    p = sequence_probabilities(reference, normal, mirrored, fps, device)
+    for emission in blended_emissions(p, x, flipped, inside, specialists, policies):
         yield decode_costs(emission, fps, *DECODER_COSTS)
 
 
