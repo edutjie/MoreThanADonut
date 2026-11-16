@@ -79,7 +79,20 @@ def detect_candidates(cap, model, frames, matrices, pitch, device, start, stop, 
     return result
 
 
-def recover_ball(ball, pitch, fps, data_dir, checkpoint, device, frame_range=None):
+def sparse_frames(missing, fps):
+    """Sample adjacent pairs across gaps and scan densely near original observations."""
+    frames = np.arange(len(missing))
+    keep = frames % round(fps) < 2
+    anchors = frames[~missing]
+    if len(anchors):
+        next_anchor = np.searchsorted(anchors, frames)
+        left = anchors[np.maximum(0, next_anchor - 1)]
+        right = anchors[np.minimum(len(anchors) - 1, next_anchor)]
+        keep |= np.minimum(np.abs(frames - left), np.abs(frames - right)) <= round(0.2 * fps)
+    return keep & missing
+
+
+def recover_ball(ball, pitch, fps, data_dir, checkpoint, device, frame_range=None, *, sparse=False):
     """Fill missing ball positions in place and return a mask of video observations."""
     if not checkpoint.is_file():
         raise ValueError(f"detector checkpoint not found: {checkpoint}")
@@ -105,7 +118,8 @@ def recover_ball(ball, pitch, fps, data_dir, checkpoint, device, frame_range=Non
             if start >= stop:
                 continue
             region = slice(start, stop)
-            frames = np.flatnonzero(missing[region] & valid[region]) + start
+            eligible = sparse_frames(missing[region], fps) if sparse else missing[region]
+            frames = np.flatnonzero(eligible & valid[region]) + start
             print(f"Running {checkpoint.name} on {len(frames):,} eligible missing frames",
                   flush=True)
             candidates = detect_candidates(cap, model, frames, matrices, pitch, device, start, stop,

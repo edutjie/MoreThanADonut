@@ -14,6 +14,44 @@ and generate a prediction if needed. Replace the bundle path with your local fol
 Open [the dashboard](http://127.0.0.1:8765) in a browser with H.264 support.
 Use `--data-dir /path/to/bundle` if the bundle is stored elsewhere. Repeat
 `--prediction "Track name" /path/to/predictions.csv` to add other runs.
+
+Without explicit prediction tracks, the dashboard uses the
+[current baseline](../TACTICAL_BASELINE.md#current-experiment-baseline)
+when its local prediction CSV is available.
+
+## SkillCorner model and tracking replay
+
+The frozen histogram boosting model's 0.6578 spellF1 is the mean over four
+held-out A-League matches. Its contest timeline uses the separate 0.6250
+public-window check. When the frozen contest CSV is at
+`data/external_possession/skillcorner-frozen/possession.csv`, the dashboard
+can use it as a fallback when the current baseline CSV is unavailable.
+
+See [External Possession](../EXTERNAL_POSSESSION.md) to build the model and
+generate the CSV at that path. Install Pillow and FFmpeg with H.264 encoding
+support to render the **SkillCorner** page's 20-second tracking animation.
+It shows the ball, both teams, the source labels, and the frozen model's
+predictions for one held-out Sydney FC–Adelaide United sample. The ball crosses
+the touchline near 0:05 and the source marks play stopped for 11.4 seconds,
+before the ball returns to play.
+
+```bash
+.venv/bin/python -m dashboard.render_skillcorner \
+  --skillcorner data/skillcorner-4340d27 \
+  --model data/external_possession/skillcorner-4340d27.joblib \
+  --output data/external_possession/skillcorner-sample.mp4
+
+.venv/bin/python -m dashboard.serve --port 8767 \
+  --prediction "v5 reference · 0.4914 public spellF1" evaluation/results/improved_dead_ball_v5.csv \
+  --prediction "SkillCorner model · 0.6250 public spellF1" data/external_possession/skillcorner-frozen/possession.csv
+```
+
+The server picks up the generated MP4 at that path. Pass `--skillcorner-sample`
+to use a different local copy. The SkillCorner Open Data grant covers tracking
+and labels. The sample page uses an animation of those coordinates.
+
+## Playback and overlay options
+
 To compare accepted recovery frames and their projected coordinates, add one
 `--recovery-track "Name" path.csv` per checkpoint:
 
@@ -65,9 +103,10 @@ select another map. To generate a map from the supplied automatic tracking:
 - **Public 5 min** jumps to the released ground-truth window. Ground-truth
   regions outside that window are blank. The full view includes pre-match,
   halftime and post-match footage, shaded outside the match halves.
-- The dots are raw ATD positions projected into video pixels using each
-  frame's tactical homography. A track slot is a tracklet, so a dot does
-  not represent a persistent player ID.
+- The dots use ATD positions projected through the per-frame homography.
+  The overlay hides player coordinates that stay exactly fixed for at least
+  five seconds from the start or end of a recording. Gap lanes still show
+  raw tracking availability. A track slot can change player identity.
 - Ball gaps mean the source has no finite ball position. Player-gap tracks
   use the shortfall from 11 observed positions per team during the match
   halves. This marks missing observations, which can also reflect a player

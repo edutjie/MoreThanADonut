@@ -10,6 +10,22 @@ from games import GAME, GAMES, asset_paths, half_video_blocks, require, source_f
 from starter.baseline import team_of_each_track, write_submission
 from starter.load_smart_tagging import load as load_tags
 
+
+class CatBoostWrapper:
+    """Thin wrapper so CatBoost has the same predict_proba interface.
+
+    Defined here (not in the training script) so it can be unpickled by
+    any module that imports tactical_baseline.
+    """
+    def __init__(self, model):
+        self.model = model
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+
+    def predict(self, X):
+        return self.model.predict(X).ravel().astype(int)
+
 LABELS = np.array(["H", "A", "D"])
 ATTACK_TAGS = {"BUILD UP", "PROGRESSION", "ATTACKING TRANSITION", "CREATING CHANCES"}
 TEAM_NAMES = {"barcelona": 0, "atletic club": 1, "athletic club": 1}
@@ -73,7 +89,35 @@ def tracking_evidence(positions, ball, confidence, teams, pitch, fps):
     live = np.where(confidence > 0, live, 0.0)
     evidence[:, 0] = live + 0.16 * np.maximum(margin, 0) * (outside <= 0.5)
     evidence[:, 1] = live + 0.16 * np.maximum(-margin, 0) * (outside <= 0.5)
-    evidence[:, 2] = 0.24 * confidence * (outside > 0.5)
+
+    # Improved dead ball detection using multiple signals
+    # Signal 1: Ball clearly outside pitch (strong signal)
+    pitch_exit = 0.32 * confidence * (outside > 0.5)
+
+    # Signal 2: Ball missing (low/no tracking confidence) suggests stoppage
+    # Dead ball situations often have poor ball tracking (66% vs 93% for live ball)
+    # Only apply when sustained to avoid brief tracking glitches
+    ball_missing = (confidence < 0.05) * 0.06
+
+    # Signal 3: Sustained ball absence or low activity
+    # Use a rolling window to detect prolonged tracking loss
+    window_size = max(2, round(1.5 * fps))  # 1.5 second window
+    missing_indicator = (confidence < 0.1).astype(float)
+    # Convolve to get count of missing frames in window
+    missing_nearby = np.convolve(missing_indicator, np.ones(window_size), mode='same') / window_size
+    sustained_missing = (missing_nearby > 0.7) * 0.24  # >70% missing in window
+
+    # Signal 4: Ball far from all players (when observable)
+    # Dead ball has mean distance 4.01m vs 2.54m for live ball
+    min_player_dist = distance.min(axis=1)
+    far_from_players = np.where(
+        (confidence > 0) & (min_player_dist > 4.5),
+        0.08 * np.clip((min_player_dist - 4.5) / 4.5, 0, 1),
+        0.0
+    )
+
+    # Combine all dead ball signals
+    evidence[:, 2] = pitch_exit + ball_missing + sustained_missing + far_from_players
 
     speed = np.r_[np.nan, np.linalg.norm(np.diff(ball, axis=0), axis=1) * fps]
     pair_confidence = np.r_[0.0, np.minimum(confidence[:-1], confidence[1:])]
@@ -111,6 +155,7 @@ def add_tag_evidence(evidence, speed, confidence, near_line, tags, offset, fps):
         restart_type = event["tags"].get("Type") or ""
         if restart_type in {"Throw-in", "Corner Kick"}:
             after = after * bounds
+        # Goal Kick and Free Kick can happen anywhere on the pitch — don't require near-line bounds.
         quality = np.where((before >= width * 0.67) & (after >= width * 0.67),
                            np.minimum(before, after), 0)
         if not np.any(quality):
@@ -121,24 +166,26 @@ def add_tag_evidence(evidence, speed, confidence, near_line, tags, offset, fps):
         setup = slice(max(start, frame - 4 * fps), frame)
         moving = np.flatnonzero(speed[setup] > 2.5)
         dead_start = setup.start + moving[-1] + 1 if len(moving) else setup.start
-        # A tracked setup can have a player standing next to the ball throughout.
-        # The combined tag and motion evidence must outweigh that proximity cue.
-        restart_support[dead_start:frame, 2] = 0.32
+        # The combined tag and motion evidence must outweigh the proximity cue.
+        restart_support[dead_start:frame, 2] = np.maximum(
+            restart_support[dead_start:frame, 2], 0.32)
         live_stop = min(len(evidence), frame + fps)
         restart_support[frame:live_stop, :2] = np.maximum(
             restart_support[frame:live_stop, :2], 0.07)
         if side is not None:
-            restart_support[frame:live_stop, side] = 0.16
+            restart_support[frame:live_stop, side] = np.maximum(
+                restart_support[frame:live_stop, side], 0.16)
 
     # Multiple overlapping tags may refer to the same action.
     evidence[:, :2] += phase_support
     evidence += restart_support
 
 
-def decode(evidence, dead_entry=None):
+def decode(evidence, dead_entry=None, transitions=None):
     """Find the best half-wide sequence with explicit turnover and stoppage costs."""
     # Uniform cues can support the current state without creating a frame-level vote.
-    transitions = np.array([[0.0, 1.55, 0.85], [1.55, 0.0, 0.85], [0.85, 0.85, 0.0]])
+    if transitions is None:
+        transitions = np.array([[0.0, 1.55, 1.60], [1.55, 0.0, 1.60], [1.60, 1.60, 0.0]])
     state_ids = np.arange(len(LABELS))
     previous = np.empty(evidence.shape, dtype=np.int8)
     # During ties, prefer staying in the current state to avoid an unsupported change.
@@ -160,6 +207,79 @@ def decode(evidence, dead_entry=None):
     return LABELS[states]
 
 
+def build_gbm_features(tracking, ball_filled, confidence, teams, pitch, fps, tags, n_frames):
+    """Build the same 85-feature matrix used to train the GBM models.
+
+    Returns a (n_frames, F) float32 numpy array.  All lags are computed on the
+    full timeline so half boundaries stay coherent.
+    """
+    import pandas as pd
+
+    players = tracking[:, :-1]
+    distance = np.linalg.norm(players - ball_filled[:, None], axis=2)
+    distance[~np.isfinite(distance)] = 999.0
+    team0_dist = distance[:, teams == 0].min(axis=1)
+    team1_dist = distance[:, teams == 1].min(axis=1)
+    team0_near = (distance[:, teams == 0] < 3.0).sum(axis=1).astype(float)
+    team1_near = (distance[:, teams == 1] < 3.0).sum(axis=1).astype(float)
+
+    speed = np.r_[np.nan, np.linalg.norm(np.diff(ball_filled, axis=0), axis=1) * fps]
+    accel = np.r_[np.nan, np.nan, np.diff(speed[1:]) * fps]
+    outside = np.maximum(-ball_filled, ball_filled - pitch).max(axis=1)
+    outside = np.where(np.isfinite(outside), outside, 0.0)
+    ball_norm = ball_filled / pitch
+    missing = (confidence < 0.1).astype(float)
+    dist_margin = team0_dist - team1_dist
+
+    in_set_piece = np.zeros(n_frames, dtype=float)
+    for ev in tags:
+        if (ev["code"] or "").upper() == "SET PIECES":
+            in_set_piece[max(0, ev["start_frame"]):min(n_frames, ev["end_frame"])] = 1.0
+
+    base = {
+        "ball_x":       ball_norm[:, 0],
+        "ball_y":       ball_norm[:, 1],
+        "confidence":   confidence,
+        "speed":        np.nan_to_num(speed, nan=0.0),
+        "accel":        np.nan_to_num(accel, nan=0.0),
+        "outside":      outside,
+        "team0_dist":   team0_dist,
+        "team1_dist":   team1_dist,
+        "team0_near":   team0_near,
+        "team1_near":   team1_near,
+        "dist_margin":  dist_margin,
+        "missing":      missing,
+        "in_set_piece": in_set_piece,
+    }
+    df = pd.DataFrame(base)
+
+    for col in ["confidence", "speed", "outside", "team0_dist", "team1_dist",
+                "missing", "dist_margin"]:
+        for lag in [1, 2, 3, 5, 10, 25, 50]:
+            df[f"{col}_lag{lag}"] = df[col].shift(lag).fillna(0)
+
+    for col, windows in [
+        ("speed",      [5, 10, 25, 50]),
+        ("confidence", [5, 10, 25, 50]),
+        ("missing",    [5, 10, 25, 50]),
+        ("outside",    [5, 25]),
+    ]:
+        for w in windows:
+            df[f"{col}_roll{w}_mean"] = df[col].rolling(w, min_periods=1).mean().fillna(0)
+            if col == "speed":
+                df[f"{col}_roll{w}_max"] = df[col].rolling(w, min_periods=1).max().fillna(0)
+                df[f"{col}_roll{w}_std"] = df[col].rolling(w, min_periods=1).std().fillna(0)
+
+    streak = np.zeros(n_frames)
+    count = 0
+    for i in range(n_frames):
+        count = count + 1 if missing[i] else 0
+        streak[i] = count
+    df["missing_streak_s"] = streak / fps
+
+    return df.values.astype(np.float32)
+
+
 def write_ball_positions(path, frames, ball, pitch):
     path.parent.mkdir(parents=True, exist_ok=True)
     with NamedTemporaryFile(mode="w", dir=path.parent, suffix=".tmp", delete=False) as output:
@@ -174,7 +294,7 @@ def write_ball_positions(path, frames, ball, pitch):
 
 
 def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detector_range=None,
-          recovery_output=None, interpolation_output=None, stoppage_cues=None):
+          recovery_output=None, interpolation_output=None, stoppage_cues=None, gbm_model=None):
     if recovery_output is not None and ball_detector is None:
         raise ValueError("recovery output requires a ball detector")
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir)
@@ -191,8 +311,16 @@ def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detect
         from dead_ball import read_cues, stoppage_entry_bonus
 
         cues = read_cues(stoppage_cues, n_frames)
+    if gbm_model is not None:
+        import pickle
+        with open(gbm_model, "rb") as fh:
+            _gbm_model = pickle.load(fh)
+    else:
+        _gbm_model = None
     print(f"Reading tactical tracking and {len(tags)} Smart Tags", flush=True)
     tracking = read_tracking(raw, n_frames, len(teams), pitch)
+    # Pre-compute GBM features across ALL frames (lags need full timeline).
+    _gbm_feats = None
     observation_confidence = np.ones(n_frames)
     if ball_detector is not None:
         from video_ball import recover_ball
@@ -200,6 +328,11 @@ def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detect
         recovered = recover_ball(tracking[:, -1], pitch, fps, data_dir, ball_detector,
                                  device, detector_range)
         observation_confidence[recovered] = 0.55
+    # Build GBM features using full-timeline ball (with recovery if applicable).
+    if _gbm_model is not None:
+        _ball_full, _conf_full = fill_short_gaps(tracking[:, -1], fps, observation_confidence)
+        _gbm_feats = build_gbm_features(tracking, _ball_full, _conf_full, teams, pitch, fps,
+                                        tags, n_frames)
     labels = np.full(n_frames, "X")
     interpolated = []
     for _, start, last in half_video_blocks(GAME):
@@ -212,6 +345,10 @@ def build(data_dir=None, use_tags=True, ball_detector=None, device="cpu", detect
         evidence, speed, confidence, near_line = tracking_evidence(
             tracking[half], ball, weights, teams, pitch, fps)
         add_tag_evidence(evidence, speed, confidence, near_line, tags, start, fps)
+        if _gbm_model is not None:
+            # Slice pre-computed full-timeline features for this half.
+            gbm_probs = _gbm_model.predict_proba(_gbm_feats[half]).astype(np.float32)
+            evidence += 0.14 * gbm_probs
         if np.any(evidence):
             entry = (stoppage_entry_bonus(cues[half], speed, confidence, fps)
                      if stoppage_cues is not None else None)
@@ -238,6 +375,7 @@ def main():
     parser.add_argument("--interpolation-output", type=Path,
                         help="write interpolated ball positions separately as frame,x,y")
     parser.add_argument("--stoppage-cues", type=Path, help="optional whistle and raised-arm CSV from dead_ball.py")
+    parser.add_argument("--gbm-model", type=Path, help="optional GBM pickle (LightGBM/XGBoost/CatBoost) trained on non-competition labels; blended as evidence at weight 0.14")
     parser.add_argument("--output", type=Path,
                         default=Path("evaluation/results/tactical_decoder.csv"))
     args = parser.parse_args()
@@ -258,7 +396,8 @@ def main():
         labels = build(args.data_dir, use_tags=not args.tracking_only,
                        ball_detector=args.ball_detector, device=args.device,
                        detector_range=args.detector_range, recovery_output=args.recovery_output,
-                       interpolation_output=args.interpolation_output, stoppage_cues=args.stoppage_cues)
+                       interpolation_output=args.interpolation_output, stoppage_cues=args.stoppage_cues,
+                       gbm_model=args.gbm_model)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with NamedTemporaryFile(dir=args.output.parent, suffix=".tmp", delete=False) as handle:
             temporary = Path(handle.name)

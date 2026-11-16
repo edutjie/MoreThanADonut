@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import numpy as np
 
+from broadcast_alignment import load_frame_pairs
 from games import DATA_DIR, GAME, GAMES, asset_paths, half_video_blocks, require, source_frames
 from starter.baseline import team_of_each_track
 from starter.load_homography import check_alignment, load, project
@@ -20,6 +21,10 @@ ROOT = Path(__file__).resolve().parent.parent
 CHUNK = 256
 RECOVERY_COLORS = ("#8fe4ab", "#6faeff", "#df9df2", "#f6c46e")
 BROADCAST_MAP = ROOT / "submissions/frozen-broadcast/frame-map.npz"
+FROZEN_PREDICTION = ROOT / "data/external_possession/skillcorner-frozen/possession.csv"
+CURRENT_BASELINE = ROOT / "data/external_possession/player-quality/final/candidate/possession.csv"
+CURRENT_BASELINE_NAME = "Current baseline · GRU with continuous player speeds · 0.6897 public spellF1"
+SKILLCORNER_SAMPLE = ROOT / "data/external_possession/skillcorner-sample.mp4"
 
 
 def bundle_path():
@@ -81,6 +86,21 @@ def recovery_pixels(path, observed_ball, in_play, matrices, valid):
     return pixels, recovered
 
 
+def clear_held_player_edges(positions, pixels, fps):
+    """Hide long, exact coordinate holds at the edges of the player feed."""
+    if len(positions) < 5 * fps:
+        return
+    for slot in range(positions.shape[1] - 1):  # Ball is the final slot.
+        track, overlay = positions[:, slot], pixels[:, slot]
+        for points, dots in ((track, overlay), (track[::-1], overlay[::-1])):
+            if not np.isfinite(points[0]).all():
+                continue
+            changes = np.flatnonzero(np.any(points != points[0], axis=1))
+            held = changes[0] if changes.size else len(points)
+            if held >= 5 * fps:
+                dots[:held] = np.nan
+
+
 def tracking_pixels(data_dir, source):
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir, source=source)
     n_frames = source_frames(source)
@@ -100,6 +120,7 @@ def tracking_pixels(data_dir, source):
                            points[..., 0], points[..., 1])
         pixels[span] = np.stack((x, y), axis=-1)
     pixels[~(valid[:, None] & observed)] = np.nan
+    clear_held_player_edges(normalized, pixels, GAMES[GAME]["fps"])
     return teams, observed, matrices, valid, pixels
 
 
@@ -140,16 +161,7 @@ def match_data(data_dir, predictions, recoveries=()):
 def broadcast_data(path, info):
     # The supplied MP4 ends one frame before the broadcast tracking feed.
     frames = source_frames("broadcast") - 1
-    with np.load(path, allow_pickle=False) as archive:
-        mapping = archive["tactical_frame"]
-    if (mapping.shape not in {(frames,), (frames + 1,)} or mapping.dtype.kind != "i"
-            or np.any((mapping < -1) | (mapping >= info["frames"]))):
-        raise ValueError("Invalid broadcast-to-tactical frame map")
-    mapping = mapping[:frames]
-    broadcast = np.flatnonzero(mapping >= 0)
-    tactical = mapping[broadcast]
-    if not len(tactical) or np.any(np.diff(tactical) <= 0):
-        raise ValueError("Broadcast frame map must contain increasing tactical frames")
+    broadcast, tactical = load_frame_pairs(path, info["frames"], frames)
     cuts = np.flatnonzero((np.diff(broadcast) != 1) | (np.diff(tactical) != 1)) + 1
     starts, ends = np.r_[0, cuts], np.r_[cuts - 1, len(tactical) - 1]
     # Runs pair equally long, consecutive spans on each native frame axis.
@@ -168,13 +180,15 @@ def broadcast_data(path, info):
             "mappedFrames": len(tactical)}
 
 
-def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broadcast_pixels=None):
+def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broadcast_pixels=None,
+                skillcorner_video=None):
     manifest = json.dumps(info, separators=(",", ":")).encode()
     broadcast_manifest = json.dumps(broadcast, separators=(",", ":")).encode()
     static = {
         "/": ("text/html; charset=utf-8", "index.html"),
         "/broadcast": ("text/html; charset=utf-8", "index.html"),
         "/aligned": ("text/html; charset=utf-8", "index.html"),
+        "/skillcorner": ("text/html; charset=utf-8", "skillcorner.html"),
         "/style.css": ("text/css; charset=utf-8", "style.css"),
         "/app.js": ("text/javascript; charset=utf-8", "app.js"),
     }
@@ -198,6 +212,9 @@ def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broad
                     return
                 if path == "/broadcast.mp4" and broadcast_video:
                     self.stream_video(broadcast_video, send_body)
+                    return
+                if path == "/skillcorner.mp4" and skillcorner_video and skillcorner_video.is_file():
+                    self.stream_video(skillcorner_video, send_body)
                     return
                 if path == "/match.json":
                     mime, body = "application/json", manifest
@@ -284,8 +301,17 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--broadcast-map", type=Path, default=BROADCAST_MAP,
                         help="broadcast-to-tactical NPZ from broadcast_alignment.py")
+    parser.add_argument("--skillcorner-sample", type=Path, default=SKILLCORNER_SAMPLE,
+                        help="public tracking replay from dashboard.render_skillcorner")
     args = parser.parse_args()
-    files = args.prediction or [("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv")]
+    if args.prediction:
+        files = args.prediction
+    elif CURRENT_BASELINE.is_file():
+        files = [(CURRENT_BASELINE_NAME, CURRENT_BASELINE)]
+    elif FROZEN_PREDICTION.is_file():
+        files = [("SkillCorner model · 0.6250 public spellF1", FROZEN_PREDICTION)]
+    else:
+        files = [("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv")]
     try:
         predictions = [(name, load_labels(Path(path), source_frames())) for name, path in files]
         print("Loading tracking and timeline…", flush=True)
@@ -318,7 +344,7 @@ def main():
                 print(f"Broadcast overlays unavailable: {error}", flush=True)
         with ThreadingHTTPServer(("127.0.0.1", args.port),
                                  handler_for(info, pixels, video, broadcast, broadcast_video,
-                                             broadcast_pixels)) as server:
+                                             broadcast_pixels, args.skillcorner_sample)) as server:
             print(f"Tactical dashboard → http://127.0.0.1:{server.server_port}", flush=True)
             server.serve_forever()
     except (OSError, ValueError) as error:

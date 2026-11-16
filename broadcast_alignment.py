@@ -14,6 +14,21 @@ from tactical_baseline import read_tracking
 MATCH_DISTANCE = 2.0  # metres, the decoder's player-control scale
 
 
+def load_frame_pairs(path, tactical_frames, broadcast_frames):
+    """Return matching frame indices, excluding the extra ATD row past the MP4."""
+    with np.load(path, allow_pickle=False) as archive:
+        mapping = archive["tactical_frame"]
+    if (mapping.shape not in {(broadcast_frames,), (broadcast_frames + 1,)}
+            or mapping.dtype.kind != "i" or np.any((mapping < -1) | (mapping >= tactical_frames))):
+        raise ValueError("Invalid broadcast-to-tactical frame map")
+    mapping = mapping[:broadcast_frames]
+    broadcast = np.flatnonzero(mapping >= 0)
+    tactical = mapping[broadcast]
+    if not len(tactical) or np.any(np.diff(tactical) <= 0):
+        raise ValueError("Broadcast frame map must contain increasing tactical frames")
+    return broadcast, tactical
+
+
 def load_feed(source, data_dir, pitch):
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir, source=source)
     teams = team_of_each_track(meta)

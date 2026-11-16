@@ -27,7 +27,7 @@ h1, h2, p { margin: 0; }
 h1 { font-size: 22px; font-weight: 650; letter-spacing: -.04em; }
 .top p { color: var(--muted); }
 .top p span { opacity: .65; padding: 0 3px; }
-.feeds { display: flex; gap: 4px; margin-inline-start: auto; }
+.feeds { display: flex; flex-wrap: wrap; gap: 4px; margin-inline-start: auto; }
 .feeds a {
   color: var(--muted); text-decoration: none; padding: 6px 10px;
   border: 1px solid transparent; border-radius: 5px;
@@ -108,6 +108,10 @@ h2 { font-size: 16px; font-weight: 650; letter-spacing: -.02em; }
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; background: currentColor; }
 .legend .outside::before { background: repeating-linear-gradient(135deg, #53575a 0 2px, #202326 2px 4px); }
 #status { padding: 9px 2px; color: var(--muted); font-size: 12px; }
+.sample .stage { width: min(100%, 1120px); }
+.sample-caption { display: grid; gap: 8px; padding: 12px; background: var(--surface); }
+.sample-caption p { color: var(--muted); }
+.sample-caption a { color: var(--alignment); }
 @media (max-width: 600px) {
   .top { gap: 6px 14px; }
   .feeds { margin-inline-start: 0; }
