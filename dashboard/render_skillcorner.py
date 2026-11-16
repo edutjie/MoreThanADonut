@@ -23,6 +23,8 @@ from external_possession import (
 SIZE = (1280, 720)
 COLORS = {"H": "#6dd0eb", "A": "#ef8499", "D": "#b7a4e8", "X": "#a7a7a1"}
 BALL_COLOR = "#f6e78e"
+SAMPLE_MATCH = 1996435
+SAMPLE_START = 6380
 
 
 def choose_start(positions, labels, frames):
@@ -34,7 +36,7 @@ def choose_start(positions, labels, frames):
     raise ValueError("no sample covering all three possession labels with at least 85% ball coverage")
 
 
-def render(root, model_path, output, match_id):
+def render(root, model_path, output, match_id, start_frame=None):
     model, costs = joblib.load(model_path)
     match = json.loads((root / f"{match_id}_match.json").read_text())
     home = match["home_team"]["name"]
@@ -42,7 +44,11 @@ def render(root, model_path, output, match_id):
     positions, weights, teams, pitch, labels = next(load_skillcorner(root, match_id))
     fps = SKILLCORNER_FPS
     frames = 20 * fps
-    start = choose_start(positions, labels, frames)
+    if start_frame is None:
+        start_frame = SAMPLE_START if match_id == SAMPLE_MATCH else choose_start(positions, labels, frames)
+    start = start_frame
+    if not 0 <= start <= len(labels) - frames:
+        raise ValueError("the 20-second clip must fit within the first half")
     x, mirrored = tracking_features(positions, weights, teams, pitch, fps)
     emission = np.log(np.maximum(probabilities(model, x, mirrored), 1e-6))
     prediction = decode_costs(emission, fps, *costs)
@@ -101,8 +107,12 @@ def render(root, model_path, output, match_id):
                     detected = weights[frame] == 1
                     draw.ellipse((px-9, py-9, px+9, py+9), fill=BALL_COLOR if detected else None,
                                  outline=BALL_COLOR, width=3)
-                    ball_status = "Ball detected" if detected else "Ball extrapolated"
+                    location = "Outside pitch" if ((ball < 0) | (ball > pitch)).any() else "Ball"
+                    ball_status = f"{location} · {'detected' if detected else 'extrapolated'}"
                 reference, predicted = source_labels[labels[frame]], prediction[frame]
+                if reference == "D":
+                    draw.rounded_rectangle((1060, 56, 1248, 96), radius=6, fill=COLORS["D"])
+                    draw.text((1154, 76), "STOPPED PLAY", anchor="mm", font=font, fill="#111315")
                 draw.text((32, 652), f"Source label  {names[reference]}", font=font, fill=COLORS[reference])
                 draw.text((32, 682), f"Model guess  {names[predicted]}", font=font, fill=COLORS[predicted])
                 minutes, seconds = divmod(frame / fps, 60)
@@ -122,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument("--skillcorner", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--match", type=int, choices=sorted(TEST_MATCHES), default=1925299)
+    parser.add_argument("--match", type=int, choices=sorted(TEST_MATCHES), default=SAMPLE_MATCH)
+    parser.add_argument("--start-frame", type=int, help="zero-based first-half start of the 20-second clip")
     args = parser.parse_args()
-    render(args.skillcorner, args.model, args.output, args.match)
+    render(args.skillcorner, args.model, args.output, args.match, args.start_frame)
