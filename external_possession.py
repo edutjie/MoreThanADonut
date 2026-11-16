@@ -230,6 +230,16 @@ def mask_ball(positions, fps, rng, mean_gap, coverage):
     return masked
 
 
+def short_ball_dropouts(positions, fps, rng):
+    """Apply the training-time burst dropout used in the A-League fit."""
+    dropout = positions.copy()
+    starts = rng.choice(len(positions), size=len(positions) // 80, replace=False)
+    lengths = rng.integers(fps // 2, fps * 5 + 1, size=len(starts))
+    for start, length in zip(starts, lengths):
+        dropout[start:start + length, -1] = np.nan
+    return dropout
+
+
 def prepare_match(root, match_id, fit, lags=()):
     rng = np.random.default_rng(match_id)
     fps = SKILLCORNER_FPS
@@ -240,11 +250,7 @@ def prepare_match(root, match_id, fit, lags=()):
             selected = np.flatnonzero(labels != metrics.X)[::2]
             # Broadcast tracking covers more of the ball trajectory than the target.
             # Synthetic, label-independent dropouts expose the model to blind stretches.
-            dropout = positions.copy()
-            starts = rng.choice(len(positions), size=len(positions) // 80, replace=False)
-            lengths = rng.integers(fps // 2, fps * 5 + 1, size=len(starts))
-            for start, length in zip(starts, lengths):
-                dropout[start:start + length, -1] = np.nan
+            dropout = short_ball_dropouts(positions, fps, rng)
             hidden, hidden_mirror = tracking_features(dropout, weights, teams, pitch, fps, lags)
             both_sides = np.array([1, 0, 2, 3], dtype=np.int8)[labels[selected]]
             halves.append((np.concatenate((normal[selected], mirrored[selected],
