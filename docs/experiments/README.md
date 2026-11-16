@@ -13,6 +13,7 @@ That folder is local to your checkout.
 - [A-League possession and lagged boosting](EXTERNAL_POSSESSION.md)
 - [IDSSE Bundesliga training](IDSSE_TRAINING.md)
 - [GRU and Transformer](SEQUENCE_POSSESSION.md)
+- [TCN, AutoGluon, MOMENT, and Mantis](TCN_AUTOML_FOUNDATION.md)
 - [Player track quality](PLAYER_TRACK_QUALITY.md)
 - [External training data audit](EXTERNAL_TRAINING_DATA.md)
 - [Additional external data experiments](EXTERNAL_DATA_EXPERIMENTS.md)
