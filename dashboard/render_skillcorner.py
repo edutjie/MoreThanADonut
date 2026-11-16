@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import joblib
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -14,6 +13,7 @@ from external_possession import (
     SKILLCORNER_FPS,
     TEST_MATCHES,
     decode_costs,
+    load_model,
     load_skillcorner,
     probabilities,
     tracking_features,
@@ -37,7 +37,7 @@ def choose_start(positions, labels, frames):
 
 
 def render(root, model_path, output, match_id, start_frame=None):
-    model, costs = joblib.load(model_path)
+    model, costs, lags = load_model(model_path)
     match = json.loads((root / f"{match_id}_match.json").read_text())
     home = match["home_team"]["name"]
     away = match["away_team"]["name"]
@@ -49,7 +49,7 @@ def render(root, model_path, output, match_id, start_frame=None):
     start = start_frame
     if not 0 <= start <= len(labels) - frames:
         raise ValueError("the 20-second clip must fit within the first half")
-    x, mirrored = tracking_features(positions, weights, teams, pitch, fps)
+    x, mirrored = tracking_features(positions, weights, teams, pitch, fps, lags)
     emission = np.log(np.maximum(probabilities(model, x, mirrored), 1e-6))
     prediction = decode_costs(emission, fps, *costs)
     source_labels = "HADX"

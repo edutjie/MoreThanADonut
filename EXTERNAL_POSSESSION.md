@@ -56,6 +56,48 @@ uses the original frozen model.
 | XGBoost 3.4.1 | 5, 10 | 0.6835 | 0.6489 |
 | CatBoost 1.2.10 | 10, 10 | 0.6516 | 0.6333 |
 
+### Explicit lag features
+
+The original 55 features already include nearest-player distances in both time
+directions, ball and team speeds over multiple time offsets, and windowed ball
+availability. The lag experiment keeps those features and adds past snapshots
+from 0.5, 1, 2 and 4 seconds earlier. Each snapshot contains ball confidence,
+distance outside the pitch, distance to the nearest player, short-window ball
+speed, and, per team, the two nearest-player distances, count of players near
+the ball, count of tracked players and short-window player speed. This adds 56
+columns. Lags reset at each half and unavailable history stays missing.
+
+The experiment uses the original four backends, match split, augmentation,
+training parameters and decoder grid. Each lagged model selects its decoder on
+the external development split. The existing public contest score still belongs
+to the original frozen histogram boosting model.
+
+| Backend | Lagged turnover, stoppage | Lagged dev spellF1 | Original held-out spellF1 | Lagged held-out spellF1 |
+| --- | --- | ---: | ---: | ---: |
+| Histogram gradient boosting | 10, 10 | 0.6923 | 0.6578 | 0.6596 |
+| LightGBM | 5, 10 | 0.6938 | 0.6563 | 0.6616 |
+| XGBoost | 5, 10 | 0.6919 | 0.6489 | 0.6560 |
+| CatBoost | 10, 5 | 0.6594 | 0.6333 | 0.6276 |
+
+LightGBM had the highest lagged A-League mean. XGBoost gained the most over
+its own original fit. The scores are based on four matches, and the gains
+were small.
+
+Both variants of each booster also ran on the same seven masked IDSSE matches
+described below. These models and decoder costs were carried over from the
+A-League experiment.
+
+| Backend | Original IDSSE spellF1 | Lagged IDSSE spellF1 |
+| --- | ---: | ---: |
+| Histogram gradient boosting | 0.4078 | 0.4090 |
+| LightGBM | 0.4126 | 0.4188 |
+| XGBoost | 0.4115 | 0.4142 |
+| CatBoost | 0.3669 | 0.3602 |
+
+Three backends improved on both external checks. All four lagged models also
+generated valid 199,319-frame contest CSVs. The lagged outputs were checked for
+format only.
+
 The frozen A-League model was also tested on seven IDSSE Bundesliga matches
 with official per-frame possession and ball-status labels. Synthetic ball
 dropouts used a mean gap of 12 seconds and expected visibility of 60%.
@@ -131,6 +173,11 @@ for backend in lightgbm xgboost catboost; do
     --model "data/external_possession/$backend-4340d27.joblib"
 done
 ```
+
+To repeat the lag experiment, include `hist` in the loop, pass
+`--lag-features`, and use a distinct model path such as
+`data/external_possession/$backend-lagged-4340d27.joblib`. The saved model
+carries its lag settings for prediction, replay and the IDSSE transfer check.
 
 The dataset, model and outputs are local artifacts. Load only a model you
 have built locally with the training command.

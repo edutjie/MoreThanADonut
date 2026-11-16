@@ -24,9 +24,10 @@ DEV_MATCHES = {1886347, 1959846, 2006363, 2013725}
 TEST_MATCHES = {1925299, 1996435, 2007448, 2017461}
 IDSSE_MATCHES = ("J03WMX", "J03WN1", "J03WOH", "J03WOY", "J03WPY", "J03WQQ", "J03WR9")
 IDSSE_FPS = 25
+LAG_SECONDS = (0.5, 1.0, 2.0, 4.0)
 
 
-def tracking_features(positions, weights, teams, pitch, fps):
+def tracking_features(positions, weights, teams, pitch, fps, lags=()):
     """Return shared features and the same team features in home/away order."""
     ball, confidence = fill_short_gaps(positions[:, -1], fps, weights)
     players = positions[:, :-1]
@@ -43,14 +44,20 @@ def tracking_features(positions, weights, teams, pitch, fps):
         side_distance = np.sort(distance[:, teams == side], axis=1)
         features.extend([side_distance[:, 0], side_distance[:, 1],
                          (side_distance < 5).sum(axis=1), visible[:, teams == side].sum(axis=1)])
+    lag_shared = shared.copy()
+    lag_teams = [features.copy() for features in team_features]
 
     for seconds in (0.2, 0.6, 1.5, 4.0):
         window = max(1, round(fps * seconds))
         shared.append(uniform_filter1d(confidence, size=window, mode="nearest"))
-        for other in (np.maximum(0, frames - window), np.minimum(len(ball) - 1, frames + window)):
+        neighbors = (np.maximum(0, frames - window), np.minimum(len(ball) - 1, frames + window))
+        for direction, other in enumerate(neighbors):
             elapsed = np.maximum(np.abs(other - frames), 1) / fps
             ball_speed = np.linalg.norm(ball[other] - ball, axis=-1) / elapsed
             shared.append(ball_speed)
+            short_backward = seconds == 0.2 and direction == 0
+            if short_backward:
+                lag_shared.append(ball_speed)
             player_speed = np.linalg.norm(players[other] - players, axis=-1) / elapsed[:, None]
             for side, features in enumerate(team_features):
                 near = features[0]
@@ -58,14 +65,33 @@ def tracking_features(positions, weights, teams, pitch, fps):
                 count = np.isfinite(side_speed).sum(axis=1)
                 mean_speed = np.nansum(np.minimum(side_speed, 12), axis=1) / np.maximum(count, 1)
                 features.extend([near[other], mean_speed])
+                if short_backward:
+                    lag_teams[side].append(mean_speed)
 
     shared = np.column_stack(shared).astype(np.float32)
     home, away = (np.column_stack(features).astype(np.float32) for features in team_features)
     normal = np.column_stack((shared, home, away))
     mirrored = np.column_stack((shared, away, home))
+    if lags:
+        normal_lags = lagged_columns((*lag_shared, *lag_teams[0], *lag_teams[1]), lags, fps)
+        mirrored_lags = lagged_columns((*lag_shared, *lag_teams[1], *lag_teams[0]), lags, fps)
+        normal = np.column_stack((normal, normal_lags))
+        mirrored = np.column_stack((mirrored, mirrored_lags))
     normal[~np.isfinite(normal)] = np.nan
     mirrored[~np.isfinite(mirrored)] = np.nan
     return normal, mirrored
+
+
+def lagged_columns(columns, lags, fps):
+    """Stack earlier snapshots, leaving the start of each half unpadded."""
+    values = np.column_stack(columns).astype(np.float32)
+    width = len(columns)
+    result = np.full((len(values), width * len(lags)), np.nan, dtype=np.float32)
+    for index, seconds in enumerate(lags):
+        offset = max(1, round(seconds * fps))
+        if offset < len(values):
+            result[offset:, index * width:(index + 1) * width] = values[:-offset]
+    return result
 
 
 def load_skillcorner(root, match_id):
@@ -196,12 +222,12 @@ def mask_ball(positions, fps, rng, mean_gap, coverage):
     return masked
 
 
-def prepare_match(root, match_id, fit):
+def prepare_match(root, match_id, fit, lags=()):
     rng = np.random.default_rng(match_id)
     fps = SKILLCORNER_FPS
     halves = []
     for positions, weights, teams, pitch, labels in load_skillcorner(root, match_id):
-        normal, mirrored = tracking_features(positions, weights, teams, pitch, fps)
+        normal, mirrored = tracking_features(positions, weights, teams, pitch, fps, lags)
         if fit:
             selected = np.flatnonzero(labels != metrics.X)[::2]
             # Broadcast tracking covers more of the ball trajectory than the target.
@@ -211,7 +237,7 @@ def prepare_match(root, match_id, fit):
             lengths = rng.integers(fps // 2, fps * 5 + 1, size=len(starts))
             for start, length in zip(starts, lengths):
                 dropout[start:start + length, -1] = np.nan
-            hidden, hidden_mirror = tracking_features(dropout, weights, teams, pitch, fps)
+            hidden, hidden_mirror = tracking_features(dropout, weights, teams, pitch, fps, lags)
             both_sides = np.array([1, 0, 2, 3], dtype=np.int8)[labels[selected]]
             halves.append((np.concatenate((normal[selected], mirrored[selected],
                                            hidden[selected], hidden_mirror[selected])),
@@ -273,24 +299,25 @@ def classifier(backend, workers):
                                           early_stopping=False, random_state=0)
 
 
-def train(root, output, workers, backend="hist"):
+def train(root, output, workers, backend="hist", lags=()):
     match_ids = sorted(int(match["id"]) for match in json.loads((root / "matches.json").read_text()))
     if not (TEST_MATCHES | DEV_MATCHES).issubset(match_ids):
         raise ValueError("pinned SkillCorner development or test matches are missing")
     train_ids = sorted(set(match_ids) - DEV_MATCHES - TEST_MATCHES)
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(prepare_match, root, match_id, True) for match_id in train_ids]
+        futures = [pool.submit(prepare_match, root, match_id, True, lags) for match_id in train_ids]
         fitted = [half for future in futures for half in future.result()]
         features = np.concatenate([x for x, _ in fitted])
         labels = np.concatenate([y for _, y in fitted])
-        print(f"Training {backend} on {len(features):,} rows from matches {train_ids}", flush=True)
+        print(f"Training {backend} on {len(features):,} rows with {features.shape[1]} features "
+              f"from matches {train_ids}", flush=True)
         model = classifier(backend, workers)
         with threadpool_limits(limits=workers):
             model.fit(features, labels)
         del fitted, features, labels, futures
         costs = [(turnover, stoppage) for turnover in (0, 2, 5, 10)
                  for stoppage in (0, 2, 5, 10)]
-        dev_jobs = [(match_id, pool.submit(prepare_match, root, match_id, False))
+        dev_jobs = [(match_id, pool.submit(prepare_match, root, match_id, False, lags))
                     for match_id in sorted(DEV_MATCHES)]
         with threadpool_limits(limits=workers):
             dev = list(measure(model, ((i, job.result()) for i, job in dev_jobs), costs))
@@ -301,8 +328,8 @@ def train(root, output, workers, backend="hist"):
             print(f"Frozen costs {selected}; dev v5 {np.mean([row[1] for row in dev]):.4f}; "
                   f"dev learned {means[best]:.4f}", flush=True)
             output.parent.mkdir(parents=True, exist_ok=True)
-            joblib.dump((model, selected), output)
-            test_jobs = [(match_id, pool.submit(prepare_match, root, match_id, False))
+            joblib.dump((model, selected, lags) if lags else (model, selected), output)
+            test_jobs = [(match_id, pool.submit(prepare_match, root, match_id, False, lags))
                          for match_id in sorted(TEST_MATCHES)]
             test = list(measure(model, ((i, job.result()) for i, job in test_jobs), [selected]))
             for match_id, baseline, learned in test:
@@ -311,8 +338,14 @@ def train(root, output, workers, backend="hist"):
                   f"learned {np.mean([row[2][0] for row in test]):.4f}")
 
 
+def load_model(model_path):
+    """Load the classifier, decoder costs and feature settings, including older checkpoints."""
+    model, costs, *feature_settings = joblib.load(model_path)
+    return model, costs, feature_settings[0] if feature_settings else ()
+
+
 def check_transfer(root, model_path):
-    model, costs = joblib.load(model_path)
+    model, costs, lags = load_model(model_path)
     fps = IDSSE_FPS
     scores = []
     for match_id in IDSSE_MATCHES:
@@ -320,7 +353,7 @@ def check_transfer(root, model_path):
         halves = []
         for positions, weights, teams, pitch, labels in load_idsse(root, match_id):
             masked = mask_ball(positions, fps, rng, mean_gap=12, coverage=0.60)
-            normal, mirrored = tracking_features(masked, weights, teams, pitch, fps)
+            normal, mirrored = tracking_features(masked, weights, teams, pitch, fps, lags)
             ball, confidence = fill_short_gaps(masked[:, -1], fps, weights)
             evidence = tracking_evidence(masked, ball, confidence, teams, pitch, fps)[0]
             halves.append((normal, mirrored, labels, evidence, fps))
@@ -332,7 +365,7 @@ def check_transfer(root, model_path):
 
 
 def predict(model_path, data_dir, output):
-    model, costs = joblib.load(model_path)
+    model, costs, lags = load_model(model_path)
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir)
     teams = np.asarray(team_of_each_track(meta))
     fps = GAMES[GAME]["fps"]
@@ -342,7 +375,7 @@ def predict(model_path, data_dir, output):
     labels = np.full(n_frames, "X")
     for _, start, last in half_video_blocks(GAME):
         half = positions[start:last + 1]
-        x, mirrored = tracking_features(half, None, teams, pitch, fps)
+        x, mirrored = tracking_features(half, None, teams, pitch, fps, lags)
         emission = np.log(np.maximum(probabilities(model, x, mirrored), 1e-6))
         labels[start:last + 1] = decode_costs(emission, fps, *costs)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -357,6 +390,8 @@ def main():
     training.add_argument("--model", type=Path, required=True)
     training.add_argument("--workers", type=int, default=4)
     training.add_argument("--backend", choices=["hist", "lightgbm", "xgboost", "catboost"], default="hist")
+    training.add_argument("--lag-features", action="store_true",
+                          help="add tracking snapshots from 0.5, 1, 2 and 4 seconds earlier")
     inference = subcommands.add_parser("predict")
     inference.add_argument("--model", type=Path, required=True)
     inference.add_argument("--data-dir", type=Path)
@@ -366,7 +401,8 @@ def main():
     transfer.add_argument("--model", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "train":
-        train(args.skillcorner, args.model, args.workers, args.backend)
+        train(args.skillcorner, args.model, args.workers, args.backend,
+              LAG_SECONDS if args.lag_features else ())
     elif args.command == "predict":
         predict(args.model, args.data_dir, args.output)
     else:
