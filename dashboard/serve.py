@@ -83,6 +83,21 @@ def recovery_pixels(path, observed_ball, in_play, matrices, valid):
     return pixels, recovered
 
 
+def clear_held_player_edges(positions, pixels, fps):
+    """Hide long, exact coordinate holds at the edges of the player feed."""
+    if len(positions) < 5 * fps:
+        return
+    for slot in range(positions.shape[1] - 1):  # Ball is the final slot.
+        track, overlay = positions[:, slot], pixels[:, slot]
+        for points, dots in ((track, overlay), (track[::-1], overlay[::-1])):
+            if not np.isfinite(points[0]).all():
+                continue
+            changes = np.flatnonzero(np.any(points != points[0], axis=1))
+            held = changes[0] if changes.size else len(points)
+            if held >= 5 * fps:
+                dots[:held] = np.nan
+
+
 def tracking_pixels(data_dir, source):
     meta, raw = require(["atd_meta", "atd_raw"], data_dir=data_dir, source=source)
     n_frames = source_frames(source)
@@ -102,6 +117,7 @@ def tracking_pixels(data_dir, source):
                            points[..., 0], points[..., 1])
         pixels[span] = np.stack((x, y), axis=-1)
     pixels[~(valid[:, None] & observed)] = np.nan
+    clear_held_player_edges(normalized, pixels, GAMES[GAME]["fps"])
     return teams, observed, matrices, valid, pixels
 
 

@@ -99,9 +99,10 @@ select another map. To generate a map from the supplied automatic tracking:
 - **Public 5 min** jumps to the released ground-truth window. Ground-truth
   regions outside that window are blank. The full view includes pre-match,
   halftime and post-match footage, shaded outside the match halves.
-- The dots are raw ATD positions projected into video pixels using each
-  frame's tactical homography. A track slot is a tracklet, so a dot does
-  not represent a persistent player ID.
+- The dots use ATD positions projected through the per-frame homography.
+  The overlay hides player coordinates that stay exactly fixed for at least
+  five seconds from the start or end of a recording. Gap lanes still show
+  raw tracking availability. A track slot can change player identity.
 - Ball gaps mean the source has no finite ball position. Player-gap tracks
   use the shortfall from 11 observed positions per team during the match
   halves. This marks missing observations, which can also reflect a player
