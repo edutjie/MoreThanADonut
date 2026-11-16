@@ -6,7 +6,9 @@
 - Branch: experiments/training-approach
 - Base commit: d5f3e12f57ace6b60564caa698d812062e294220
 - Started: 2026-11-16T15:43:26Z
-- Status: active
+- Updated: 2026-11-16T15:54:32Z
+- Status: completed
+- Delivery: experiment branch
 - Integration owner: xuheping
 - Owned paths: external possession results, stoppage experiments and this handoff
 
@@ -23,7 +25,7 @@
 - The branch contains modular commits for external training, model
   comparisons and the dashboard, explicit lags, and YOLO recovery.
 
-## Resume here
+## Experiment scope
 
 1. Verify the checkpoint is on the remote experiment branch.
 2. Calibrate in-pitch stoppage and restart cues on external football tracking
@@ -51,7 +53,22 @@
   the nearest labeled D-to-live transition across 155 usable IDSSE events.
 - Evidence: [stoppage experiment report](../STOPPAGE_EXPERIMENT.md).
 
+### 20261116T154326Z-xuheping-codex-stoppage-signals-morethanadonut-03
+
+- Changes: train and test a spectral whistle detector on public B-Human
+  RoboCup audio, and add local tactical and verified broadcast cue extraction.
+- Validation: held-out event F1 was 0.7097 learned versus 0.1967 tonal,
+  over 12 annotated whistles. The tactical detectors emitted 1 and 25
+  candidates respectively. The learned broadcast detector emitted 2, with 1
+  mapped to a tactical frame. No paired intervals were applied.
+- Evidence: [whistle experiment report](../WHISTLE_EXPERIMENT.md).
+
 ## Publication checkpoint
 
 - The pre-experiment checkpoint was verified on origin at
   `527dc0e294caf0fb2085675f660de9a0fa3d44df`.
+- The frozen lagged LightGBM remains the reference at 0.6452 public spellF1.
+  The experimental runs did not change the CSV. Private scoring is unknown.
+- Local audio data, weights and cue CSVs are excluded from publication. The
+  2024 NaoDevils dataset and Metrica sample matches were identified for future
+  validation. They were outside the completed training run.

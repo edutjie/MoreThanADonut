@@ -52,12 +52,16 @@ def whistle_frames(samples, fps):
     return frames[np.r_[True, np.diff(frames) >= round(0.25 * fps)]] if len(frames) else frames
 
 
-def extract_whistles(video, first, stop, fps):
+def read_audio(video, first, stop, fps):
     command = ["ffmpeg", "-nostdin", "-v", "error", "-ss", str(first / fps), "-i", str(video),
                "-t", str((stop - first) / fps), "-map", "0:a:0", "-ac", "1", "-ar", str(SAMPLE_RATE),
                "-f", "f32le", "pipe:1"]
     result = subprocess.run(command, check=True, stdout=subprocess.PIPE)
-    frames = first + whistle_frames(np.frombuffer(result.stdout, dtype="<f4"), fps)
+    return np.frombuffer(result.stdout, dtype="<f4")
+
+
+def extract_whistles(video, first, stop, fps):
+    frames = first + whistle_frames(read_audio(video, first, stop, fps), fps)
     return frames[frames < stop]
 
 
