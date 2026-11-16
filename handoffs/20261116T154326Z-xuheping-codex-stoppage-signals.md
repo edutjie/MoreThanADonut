@@ -38,3 +38,20 @@
 - Changes: log the frozen reference and pre-experiment handoff.
 - Validation: existing official public scoreboard and CSV validator output,
   aggregate Smart Tag audit, and Git whitespace and scope review.
+
+### 20261116T154326Z-xuheping-codex-stoppage-signals-morethanadonut-02
+
+- Changes: add an external event-aligned benchmark and a local free-kick
+  experiment around frozen LightGBM.
+- Validation: four external development games and three held-out games showed
+  unchanged spellF1 across the tested cue policies. The selected paired rule
+  produced no contest intervals. All three contest outputs passed 199,319-frame
+  validation and matched the frozen CSV exactly.
+- Findings: official free-kick execution times were a median 1.36 seconds from
+  the nearest labeled D-to-live transition across 155 usable IDSSE events.
+- Evidence: [stoppage experiment report](../STOPPAGE_EXPERIMENT.md).
+
+## Publication checkpoint
+
+- The pre-experiment checkpoint was verified on origin at
+  `527dc0e294caf0fb2085675f660de9a0fa3d44df`.

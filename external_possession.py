@@ -156,7 +156,7 @@ def load_skillcorner(root, match_id):
         yield positions[period] + pitch / 2, weights[period], teams, pitch, labels
 
 
-def load_idsse(root, match_id):
+def load_idsse(root, match_id, *, with_clock=False):
     meta_path, = root.glob(f"DFL_02_01_matchinformation_*-{match_id}.xml")
     tracking_path, = root.glob(f"DFL_04_03_positions_raw_observed_*-{match_id}.xml")
     meta = ET.parse(meta_path)
@@ -172,6 +172,7 @@ def load_idsse(root, match_id):
                 slot_by_id[player.get("PersonId")] = len(teams)
                 teams.append(sides[team.get("TeamId")])
     tracks = {"firstHalf": {}, "secondHalf": {}}
+    first_ball_frame = {}
     # FrameSets are player-major. Read one at a time to bound XML memory use.
     for _, node in ET.iterparse(tracking_path):
         if node.tag != "FrameSet":
@@ -181,6 +182,12 @@ def load_idsse(root, match_id):
         if section is not None and len(node):
             is_ball = node[0].get("BallStatus") is not None
             if is_ball or slot is not None:
+                if is_ball and with_clock:
+                    first = min(node, key=lambda frame: int(frame.get("N")))
+                    first_ball_frame[node.get("GameSection")] = min(
+                        (int(first.get("N")), first.get("T")),
+                        first_ball_frame.get(node.get("GameSection"), (float("inf"), "")),
+                    )
                 key = len(teams) if is_ball else slot
                 rows = section.setdefault(key, [])
                 for frame in node:
@@ -207,7 +214,8 @@ def load_idsse(root, match_id):
         labels[ball[:, 0].astype(int) - start] = ball[:, 3]
         if not {metrics.H, metrics.A, metrics.D}.issubset(np.unique(labels)):
             raise ValueError(f"{match_id}: missing possession or stoppage labels in {name}")
-        yield positions + pitch / 2, np.ones(len(labels)), teams, pitch, labels
+        data = (positions + pitch / 2, np.ones(len(labels)), teams, pitch, labels)
+        yield (*data, first_ball_frame[name][1]) if with_clock else data
 
 
 def mask_ball(positions, fps, rng, mean_gap, coverage):
