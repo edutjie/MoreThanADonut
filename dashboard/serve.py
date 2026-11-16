@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import numpy as np
 
+from broadcast_alignment import load_frame_pairs
 from games import DATA_DIR, GAME, GAMES, asset_paths, half_video_blocks, require, source_frames
 from starter.baseline import team_of_each_track
 from starter.load_homography import check_alignment, load, project
@@ -160,16 +161,7 @@ def match_data(data_dir, predictions, recoveries=()):
 def broadcast_data(path, info):
     # The supplied MP4 ends one frame before the broadcast tracking feed.
     frames = source_frames("broadcast") - 1
-    with np.load(path, allow_pickle=False) as archive:
-        mapping = archive["tactical_frame"]
-    if (mapping.shape not in {(frames,), (frames + 1,)} or mapping.dtype.kind != "i"
-            or np.any((mapping < -1) | (mapping >= info["frames"]))):
-        raise ValueError("Invalid broadcast-to-tactical frame map")
-    mapping = mapping[:frames]
-    broadcast = np.flatnonzero(mapping >= 0)
-    tactical = mapping[broadcast]
-    if not len(tactical) or np.any(np.diff(tactical) <= 0):
-        raise ValueError("Broadcast frame map must contain increasing tactical frames")
+    broadcast, tactical = load_frame_pairs(path, info["frames"], frames)
     cuts = np.flatnonzero((np.diff(broadcast) != 1) | (np.diff(tactical) != 1)) + 1
     starts, ends = np.r_[0, cuts], np.r_[cuts - 1, len(tactical) - 1]
     # Runs pair equally long, consecutive spans on each native frame axis.

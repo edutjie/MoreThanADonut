@@ -355,17 +355,20 @@ def restore(path, device):
     return model.to(device).eval(), payload["epoch"]
 
 
+def tracking_probabilities(model, tracks, teams, pitch, fps, device):
+    if model.repair_players:
+        tracks = repair_player_tracks(tracks, fps)
+    normal, mirrored = sequence_features(tracks, None, teams, pitch, fps, model.continuous_motion)
+    return sequence_probabilities(model, normal, mirrored, fps, device)
+
+
 def predict(args):
     device = torch.device(args.device)
     model, epoch = restore(args.model, device)
     positions, teams, pitch, fps = contest_tracking(args.data_dir)
     labels = np.full(len(positions), "X")
     for _, start, last in half_video_blocks(GAME):
-        tracks = positions[start:last + 1]
-        if model.repair_players:
-            tracks = repair_player_tracks(tracks, fps)
-        normal, mirrored = sequence_features(tracks, None, teams, pitch, fps, model.continuous_motion)
-        p = sequence_probabilities(model, normal, mirrored, fps, device)
+        p = tracking_probabilities(model, positions[start:last + 1], teams, pitch, fps, device)
         labels[start:last + 1] = decode_costs(np.log(np.maximum(p, 1e-6)), fps, *DECODER_COSTS)
     write_submission(args.output, labels)
     print(f"Wrote {len(labels):,} contest frames using {model.architecture} frozen at epoch {epoch}")
