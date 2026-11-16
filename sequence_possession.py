@@ -19,6 +19,7 @@ from external_possession import (
 )
 from games import GAME, half_video_blocks
 from idsse_training import IDSSE_TEST
+from possession_sources import LEGACY_MATCHES, load_legacy_skillcorner
 from starter.baseline import write_submission
 
 
@@ -102,11 +103,11 @@ def sequence_features(positions, weights, teams, pitch, fps):
     return np.column_stack((base, visibility)), np.column_stack((mirrored, visibility))
 
 
-def training_halves(root, match):
+def training_halves(root, match, loader=load_skillcorner):
     rng = np.random.default_rng(match)
     halves = []
     fps = SKILLCORNER_FPS
-    for positions, weights, teams, pitch, labels in load_skillcorner(root, match):
+    for positions, weights, teams, pitch, labels in loader(root, match):
         augmented = short_ball_dropouts(positions, fps, rng)
         for tracks in (positions, augmented):
             x, mirrored = sequence_features(tracks, weights, teams, pitch, fps)
@@ -135,7 +136,7 @@ def normalize(half_data):
     return mean, np.maximum(scale, 1e-3)
 
 
-def batches(data, rng):
+def batches(data, rng, partial_start):
     windows = [(index, start) for index, (_, _, labels) in enumerate(data)
                for start in range(0, len(labels), WINDOW)
                if np.any(labels[start:start + WINDOW] != metrics.X)]
@@ -155,7 +156,19 @@ def batches(data, rng):
             x[row, :len(targets)] = (mirrored if use_mirror else normal)[segment]
             y[row, :len(targets)] = mirror_labels[targets] if use_mirror else targets
             padding[row, :len(targets)] = False
-        yield x, y, padding
+        partial = np.array([index >= partial_start for index, _ in selection])
+        yield x, y, padding, partial
+
+
+def supervised_loss(logits, labels, partial):
+    # For partially labeled sources, condition on live play and learn only H vs A.
+    joint = nn.functional.cross_entropy(logits.flatten(0, 1), labels.flatten(),
+                                        ignore_index=metrics.X, reduction="none").view_as(labels)
+    conditional = nn.functional.cross_entropy(
+        logits[:, :, :2].reshape(-1, 2), labels.flatten().masked_fill(
+            labels.flatten() == metrics.D, metrics.X),
+        ignore_index=metrics.X, reduction="none").view_as(labels)
+    return torch.where(partial[:, None], conditional, joint).sum() / (labels != metrics.X).sum()
 
 
 @torch.inference_mode()
@@ -226,9 +239,17 @@ def fit(args):
     args.output.mkdir(parents=True, exist_ok=True)
     with ProcessPoolExecutor(max_workers=args.workers, mp_context=get_context("spawn")) as pool:
         jobs = [pool.submit(training_halves, args.skillcorner, match) for match in train_ids]
+        if args.legacy_skillcorner:
+            jobs.extend(pool.submit(training_halves, args.legacy_skillcorner, match,
+                                    load_legacy_skillcorner) for match in LEGACY_MATCHES)
         development_jobs = [pool.submit(evaluation_halves, args.skillcorner, match, False)
                             for match in sorted(DEV_MATCHES)]
-        training = [half for job in jobs for half in job.result()]
+        primary = [half for job in jobs[:len(train_ids)] for half in job.result()]
+        partial_start = len(primary)
+        training = primary + [half for job in jobs[len(train_ids):] for half in job.result()]
+        del primary
+        if not args.conditional_legacy:
+            partial_start = len(training)
         development = [job.result() for job in development_jobs]
         mean, scale = normalize(training)
         model = ARCHITECTURES[args.architecture](mean, scale).to(device)
@@ -238,12 +259,12 @@ def fit(args):
         checkpoint = args.output / f"{args.architecture}.pt"
         ref_dev = evaluate(reference, development)
         print(f"Training {args.architecture} on {sum(len(y) for _, _, y in training):,} sequence frames "
-              f"across {len(train_ids)} matches; reference dev {ref_dev}", flush=True)
+              f"across {len(jobs)} matches; reference dev {ref_dev}", flush=True)
         history = []
         for epoch in range(1, EPOCHS + 1):
             model.train()
             losses = []
-            for features, labels, padding in batches(training, rng):
+            for features, labels, padding, partial in batches(training, rng, partial_start):
                 x = torch.from_numpy(features).to(device)
                 y = torch.from_numpy(labels).to(device, dtype=torch.long)
                 optimizer.zero_grad(set_to_none=True)
@@ -252,7 +273,10 @@ def fit(args):
                 with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=amp):
                     # Padding has no tracking frame. Missing-ball and X-labeled frames still attend.
                     output = model(x, pad)
-                    loss = criterion(output.flatten(0, 1), y.flatten())
+                    if args.conditional_legacy:
+                        loss = supervised_loss(output, y, torch.from_numpy(partial).to(device))
+                    else:
+                        loss = criterion(output.flatten(0, 1), y.flatten())
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), 2.0)
                 optimizer.step()
@@ -280,6 +304,8 @@ def fit(args):
             print(f"Held-out {name}: {result[name]}", flush=True)
     (args.output / "benchmark.json").write_text(json.dumps(
         {"architecture": args.architecture, "selected_epoch": epoch,
+         "legacy_skillcorner_matches": list(LEGACY_MATCHES) if args.legacy_skillcorner else [],
+         "conditional_legacy": args.conditional_legacy,
          "reference_development": ref_dev, "history": history, "held_out": result},
         indent=2) + "\n")
 
@@ -310,6 +336,9 @@ if __name__ == "__main__":
     commands = parser.add_subparsers(dest="command", required=True)
     training = commands.add_parser("train")
     training.add_argument("--skillcorner", type=Path, required=True)
+    training.add_argument("--legacy-skillcorner", type=Path)
+    training.add_argument("--conditional-legacy", action="store_true",
+                          help="use legacy matches for home vs away loss only")
     training.add_argument("--idsse", type=Path, required=True)
     training.add_argument("--reference", type=Path, required=True)
     training.add_argument("--workers", type=int, default=4)
@@ -322,6 +351,8 @@ if __name__ == "__main__":
         command.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "train":
+        if args.conditional_legacy and not args.legacy_skillcorner:
+            parser.error("--conditional-legacy requires --legacy-skillcorner")
         fit(args)
     else:
         predict(args)

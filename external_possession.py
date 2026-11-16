@@ -15,6 +15,7 @@ from threadpoolctl import threadpool_limits
 
 from evaluation import possession_metrics as metrics
 from games import GAME, GAMES, half_video_blocks, require, source_frames
+from possession_sources import LEGACY_MATCHES, load_legacy_skillcorner
 from starter.baseline import team_of_each_track, write_submission
 from tactical_baseline import LABELS, decode, fill_short_gaps, read_tracking, tracking_evidence
 
@@ -240,11 +241,11 @@ def short_ball_dropouts(positions, fps, rng):
     return dropout
 
 
-def prepare_match(root, match_id, fit, lags=()):
+def prepare_match(root, match_id, fit, lags=(), loader=load_skillcorner):
     rng = np.random.default_rng(match_id)
     fps = SKILLCORNER_FPS
     halves = []
-    for positions, weights, teams, pitch, labels in load_skillcorner(root, match_id):
+    for positions, weights, teams, pitch, labels in loader(root, match_id):
         normal, mirrored = tracking_features(positions, weights, teams, pitch, fps, lags)
         if fit:
             selected = np.flatnonzero(labels != metrics.X)[::2]
@@ -313,18 +314,21 @@ def classifier(backend, workers):
                                           early_stopping=False, random_state=0)
 
 
-def train(root, output, workers, backend="hist", lags=()):
+def train(root, output, workers, backend="hist", lags=(), legacy=None):
     match_ids = sorted(int(match["id"]) for match in json.loads((root / "matches.json").read_text()))
     if not (TEST_MATCHES | DEV_MATCHES).issubset(match_ids):
         raise ValueError("pinned SkillCorner development or test matches are missing")
     train_ids = sorted(set(match_ids) - DEV_MATCHES - TEST_MATCHES)
     with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(prepare_match, root, match_id, True, lags) for match_id in train_ids]
+        if legacy:
+            futures.extend(pool.submit(prepare_match, legacy, match_id, True, lags,
+                                       load_legacy_skillcorner) for match_id in LEGACY_MATCHES)
         fitted = [half for future in futures for half in future.result()]
         features = np.concatenate([x for x, _ in fitted])
         labels = np.concatenate([y for _, y in fitted])
         print(f"Training {backend} on {len(features):,} rows with {features.shape[1]} features "
-              f"from matches {train_ids}", flush=True)
+              f"from matches {train_ids + (list(LEGACY_MATCHES) if legacy else [])}", flush=True)
         model = classifier(backend, workers)
         with threadpool_limits(limits=workers):
             model.fit(features, labels)
@@ -401,6 +405,7 @@ def main():
     subcommands = parser.add_subparsers(dest="command", required=True)
     training = subcommands.add_parser("train")
     training.add_argument("--skillcorner", type=Path, required=True)
+    training.add_argument("--legacy-skillcorner", type=Path)
     training.add_argument("--model", type=Path, required=True)
     training.add_argument("--workers", type=int, default=4)
     training.add_argument("--backend", choices=["hist", "lightgbm", "xgboost", "catboost"], default="hist")
@@ -416,7 +421,7 @@ def main():
     args = parser.parse_args()
     if args.command == "train":
         train(args.skillcorner, args.model, args.workers, args.backend,
-              LAG_SECONDS if args.lag_features else ())
+              LAG_SECONDS if args.lag_features else (), args.legacy_skillcorner)
     elif args.command == "predict":
         predict(args.model, args.data_dir, args.output)
     else:
