@@ -74,7 +74,7 @@ under CC BY 4.0. The event XML is unnecessary for this experiment.
 
 ```bash
 work=data/external_possession/idsse-training
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python idsse_training.py \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.idsse_training \
   --idsse data/idsse --skillcorner data/skillcorner-4340d27 \
   --reference data/external_possession/lightgbm-lagged-4340d27.joblib \
   --output "$work" --workers 4

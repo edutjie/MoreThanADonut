@@ -70,7 +70,7 @@ intervals.
 The 199,319-frame CSV passed validation and reproduced byte for byte.
 The public window contains 7,500 graded frames and 17 possession spells.
 The original GRU was retained after this experiment. See the
-[current baseline](TACTICAL_BASELINE.md#current-experiment-baseline) for
+[current baseline](../../TACTICAL_BASELINE.md#current-experiment-baseline) for
 the subsequent player-tracking experiment.
 
 ## Reproduce
@@ -79,11 +79,11 @@ the subsequent player-tracking experiment.
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4
 work=data/external_possession/gru-dead-ball
 gru=data/external_possession/sequence-gru/gru.pt
-python gru_dead_ball.py calibrate --device cuda --reference "$gru" \
+python -m experiments.gru_dead_ball calibrate --device cuda --reference "$gru" \
   --idsse external_data/idsse --skillcorner external_data/skillcorner-4340d27 \
   --legacy external_data/skillcorner-history --statsbomb external_data/statsbomb-clasicos \
   --output "$work"
-python gru_dead_ball.py predict --device cuda --reference "$gru" \
+python -m experiments.gru_dead_ball predict --device cuda --reference "$gru" \
   --specialists "$work/specialists.joblib" --best-enabled \
   --output "$work/best-enabled/possession.csv"
 python evaluation/validate_submission.py "$work/best-enabled/possession.csv"

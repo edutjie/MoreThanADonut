@@ -21,7 +21,8 @@ and the board still reorders them. That is the clearest demonstration in the rep
 
 ## Why these are committed and yours will not be
 
-`*.csv` here is **gitignored**, with a single exception for `baseline_*.csv`.
+Generated files and subdirectories here are **gitignored**. The `baseline_*.csv`
+reference outputs are the CSV exception.
 
 A submission is a complete set of labels for the match, and a correct one is a copy of the ground
 truth. Nothing that belongs in this folder belongs in a public repository, and your own working

@@ -8,14 +8,14 @@ import joblib
 import numpy as np
 import torch
 
-from ball_recovery_experiment import contest_tracking
+from experiments.ball_recovery_experiment import contest_tracking
 from external_possession import (
     DEV_MATCHES, IDSSE_FPS, LAG_SECONDS, SKILLCORNER_FPS, TEST_MATCHES,
     decode_costs, load_idsse, load_skillcorner, tracking_features,
 )
 from games import GAME, half_video_blocks
-from gru_dead_ball import blended_emissions, observed
-from idsse_training import IDSSE_TEST
+from experiments.gru_dead_ball import blended_emissions, observed
+from experiments.idsse_training import IDSSE_TEST
 from player_track_quality import corrupt_player_tracks, repair_player_tracks
 from sequence_possession import (
     DECODER_COSTS, restore, score_prediction, sequence_probabilities,

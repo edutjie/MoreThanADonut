@@ -52,10 +52,10 @@ alongside the metadata and tracking XML. Prepare the LightGBM model using
 ```bash
 model=data/external_possession/lightgbm-lagged-4340d27.joblib
 work=data/external_possession/stoppage
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python stoppage_experiment.py external \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.stoppage_experiment external \
   --idsse data/idsse --model "$model" --workers 4
 python dead_ball.py --output "$work/tonal-whistles.csv"
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python stoppage_experiment.py predict \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.stoppage_experiment predict \
   --model "$model" --whistles "$work/tonal-whistles.csv" --policy paired-short \
   --output "$work/paired-tonal/possession.csv"
 python evaluation/validate_submission.py "$work/paired-tonal/possession.csv"

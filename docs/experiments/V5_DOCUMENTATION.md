@@ -2,7 +2,7 @@
 
 v5 is a historical reference. See [the external possession experiment](EXTERNAL_POSSESSION.md)
 for the current candidate. Commit `cad89df` records public-window comparisons
-used to choose the v5 transition cost. See the restriction in [RULES.md](RULES.md).
+used to choose the v5 transition cost. See the restriction in [RULES.md](../../RULES.md).
 
 ## Critical Information Not Documented
 

@@ -13,7 +13,7 @@ from external_possession import (
     DEV_MATCHES, IDSSE_FPS, SKILLCORNER_FPS, TEST_MATCHES, decode_costs,
     load_idsse, load_model, load_skillcorner, probabilities, tracking_features,
 )
-from idsse_training import IDSSE_DEV, IDSSE_TEST
+from experiments.idsse_training import IDSSE_DEV, IDSSE_TEST
 from possession_sources import METRICA_FPS, METRICA_MATCHES, load_metrica
 
 

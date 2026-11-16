@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ball_recovery_experiment import DEV_GAMES, contest_tracking
+from experiments.ball_recovery_experiment import DEV_GAMES, contest_tracking
 from dead_ball import read_cues
 from evaluation import possession_metrics as metrics
 from external_possession import (

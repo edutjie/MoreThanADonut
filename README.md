@@ -109,6 +109,9 @@ Full description of every asset and how the frames line up: **[DATA.md](DATA.md)
 
 ## Read these, in this order
 
+For team development, see the [current tactical and GRU baselines](TACTICAL_BASELINE.md),
+the [local dashboard](dashboard/README.md), and the [experiment reports](docs/experiments/README.md).
+
 | | |
 |---|---|
 | **[CHALLENGE.md](CHALLENGE.md)** | the problem, the four labels, what counts as possession |

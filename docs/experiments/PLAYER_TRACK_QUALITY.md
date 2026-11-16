@@ -1,7 +1,7 @@
 # Player tracking quality in the possession models
 
 The retrained GRU with continuous player speeds is the
-[current experiment baseline](TACTICAL_BASELINE.md#current-experiment-baseline).
+[current experiment baseline](../../TACTICAL_BASELINE.md#current-experiment-baseline).
 
 Player coordinates influence ball-to-player distances, team visibility and
 player speed features. This experiment changes the tracking inputs used by
@@ -94,7 +94,7 @@ python sequence_possession.py train --skillcorner "$aleague" --idsse "$idsse" \
 python sequence_possession.py train --skillcorner "$aleague" --idsse "$idsse" \
   --reference "$lightgbm" --device cuda --repair-players --continuous-motion \
   --output "$work/continuous"
-python player_quality_experiment.py --skillcorner "$aleague" --idsse "$idsse" \
+python -m experiments.player_quality_experiment --skillcorner "$aleague" --idsse "$idsse" \
   --original data/external_possession/sequence-gru/gru.pt --retrained "$work/retrained/gru.pt" \
   --continuous "$work/continuous/gru.pt" \
   --specialists data/external_possession/gru-dead-ball/specialists.joblib \

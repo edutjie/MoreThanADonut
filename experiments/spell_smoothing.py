@@ -8,11 +8,11 @@ from pathlib import Path
 
 import numpy as np
 
-from ball_recovery_experiment import contest_tracking
+from experiments.ball_recovery_experiment import contest_tracking
 from evaluation import possession_metrics as metrics
 from external_possession import DEV_MATCHES, TEST_MATCHES, load_model, probabilities, tracking_features
 from games import GAME, half_video_blocks
-from idsse_training import IDSSE_DEV, IDSSE_TEST, evaluation_inputs
+from experiments.idsse_training import IDSSE_DEV, IDSSE_TEST, evaluation_inputs
 from starter.baseline import write_submission
 from tactical_baseline import LABELS, decode
 

@@ -39,12 +39,12 @@ FFmpeg. The experiment uses NumPy, SciPy, scikit-learn and joblib.
 
 ```bash
 work=data/external_possession/stoppage
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python whistle_experiment.py train \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python -m experiments.whistle_experiment train \
   --archive data/robocup-whistle-2017/whistle.zip \
   --output "$work/whistle-robocup.joblib"
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python whistle_experiment.py detect \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python -m experiments.whistle_experiment detect \
   --model "$work/whistle-robocup.joblib" --output "$work/learned-whistles.csv"
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python whistle_experiment.py detect \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=5 python -m experiments.whistle_experiment detect \
   --model "$work/whistle-robocup.joblib" \
   --broadcast-map submissions/frozen-broadcast/frame-map.npz \
   --output "$work/broadcast-whistles.csv"

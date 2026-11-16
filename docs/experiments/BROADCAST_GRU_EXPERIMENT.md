@@ -1,6 +1,6 @@
 # Aligned broadcast tracking with the frozen GRU
 
-The [current GRU baseline](TACTICAL_BASELINE.md#current-experiment-baseline)
+The [current GRU baseline](../../TACTICAL_BASELINE.md#current-experiment-baseline)
 was trained on SkillCorner A-League broadcast-derived tracking. This experiment
 tests using the contest broadcast tracking wherever the existing
 [frame map](BROADCAST_INTEGRATION_EXPERIMENT.md) verifies alignment.
@@ -57,7 +57,7 @@ policies reproduced byte for byte on a second run.
 ```bash
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4
 work=data/external_possession/broadcast-gru
-python broadcast_gru_experiment.py \
+python -m experiments.broadcast_gru_experiment \
   --model data/external_possession/player-quality/continuous/gru.pt \
   --broadcast-map submissions/frozen-broadcast/frame-map.npz \
   --data-dir data --device cuda --output "$work"
