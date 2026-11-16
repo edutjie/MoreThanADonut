@@ -78,3 +78,55 @@ python evaluation/run_evaluation.py --gt public --results "$work/candidate" \
 
 The experiment uses PyTorch 2.15.0+cu132. The checkpoint, predictions and
 full report are local artifacts under ignored `data/`.
+
+## Bidirectional Transformer comparison
+
+The Transformer uses the same 113 tracking inputs, missing-value flags, 10 Hz
+sequence grid, 512-frame windows, 80-frame inference context, training
+copies, splits and decoder. It uses four encoder layers with four attention
+heads each, 64 hidden units, a 128-unit feed-forward block, dropout of 0.15,
+and sinusoidal position encoding. Attention sees both directions within the
+window. Only padded frames are masked. Real frames with missing ball
+coordinates or unknown training labels remain visible to attention.
+
+Train with the same eight epochs and choose the checkpoint on A-League
+development spellF1. The CUDA training run uses bfloat16 autocast; inference
+uses float32.
+
+The Transformer froze at epoch 8 with 0.6813 development spellF1, versus
+0.7064 for the GRU and 0.6938 for LightGBM.
+
+| Held-out test | LightGBM spellF1 | GRU spellF1 | Transformer spellF1 | Matched gap spells (LightGBM / GRU / Transformer) |
+| --- | ---: | ---: | ---: | ---: |
+| A-League, original tracking | 0.6616 | **0.6728** | 0.6482 | 11 / 14 / 13 of 30 |
+| A-League, added long gaps | 0.5540 | **0.5909** | 0.5805 | 337 / 317 / 321 of 590 |
+| Bundesliga, masked tracking | 0.4369 | **0.4376** | 0.4215 | 164 / 147 / 145 of 379 |
+
+The Transformer matched four additional gap spells relative to the GRU
+on stressed A-League tracking. Its total spellF1 was lower than the GRU
+on all three held-out tests.
+
+| Public contest check | SpellF1 | MacroF1 | Dead-ball F1 |
+| --- | ---: | ---: | ---: |
+| Frozen LightGBM | 0.6452 | 0.8084 | 0.6861 |
+| Frozen GRU | **0.6621** | **0.8894** | **0.8946** |
+| Frozen Transformer | 0.5000 | 0.8887 | 0.8408 |
+
+At temporal IoU 0.5, the Transformer matched 7 of the 17 public possessions
+and the GRU matched 10. Both froze before the contest check. The Transformer
+CSV was valid over all 199,319 frames and repeated inference reproduced it
+byte for byte. The GRU checkpoint also reproduced its original CSV through
+the shared sequence entry point.
+
+```bash
+work=data/external_possession/sequence-transformer
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python sequence_possession.py train \
+  --architecture transformer --skillcorner data/skillcorner-4340d27 --idsse data/idsse \
+  --reference data/external_possession/lightgbm-lagged-4340d27.joblib \
+  --device cuda --workers 4 --output "$work"
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python sequence_possession.py predict \
+  --model "$work/transformer.pt" --device cuda --output "$work/candidate/possession.csv"
+python evaluation/validate_submission.py "$work/candidate/possession.csv"
+python evaluation/run_evaluation.py --gt public --results "$work/candidate" \
+  --out "$work/public-check" --no-detail --bootstrap 0
+```

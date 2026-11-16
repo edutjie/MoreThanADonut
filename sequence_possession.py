@@ -1,4 +1,4 @@
-"""Evaluate a small bidirectional GRU on the frozen external possession splits."""
+"""Evaluate bidirectional sequence models on the frozen external possession splits."""
 
 import argparse
 import json
@@ -31,23 +31,61 @@ BASE_FEATURES = 111
 DECODER_COSTS = (5, 10)
 
 
-class PossessionGRU(nn.Module):
+class SequenceModel(nn.Module):
     def __init__(self, mean, scale):
         super().__init__()
         self.register_buffer("mean", torch.as_tensor(mean, dtype=torch.float32))
         self.register_buffer("scale", torch.as_tensor(scale, dtype=torch.float32))
+
+    def standardized_inputs(self, features):
+        missing = ~torch.isfinite(features)
+        x = ((features - self.mean) / self.scale).masked_fill(missing, 0).clamp(-8, 8)
+        return torch.cat((x, missing.to(x.dtype)), dim=-1)
+
+
+class PossessionGRU(SequenceModel):
+    architecture = "gru"
+
+    def __init__(self, mean, scale):
+        super().__init__(mean, scale)
         width = len(mean)
         self.input_projection = nn.Sequential(nn.Linear(2 * width, 48), nn.LayerNorm(48),
                                               nn.GELU(), nn.Dropout(0.15))
         self.gru = nn.GRU(48, 48, batch_first=True, bidirectional=True)
         self.head = nn.Sequential(nn.Dropout(0.15), nn.Linear(96, 3))
 
-    def forward(self, features):
-        missing = ~torch.isfinite(features)
-        x = ((features - self.mean) / self.scale).masked_fill(missing, 0).clamp(-8, 8)
-        x = torch.cat((x, missing.to(x.dtype)), dim=-1)
+    def forward(self, features, padding=None):
+        x = self.standardized_inputs(features)
         states, _ = self.gru(self.input_projection(x))
         return self.head(states)
+
+
+class PossessionTransformer(SequenceModel):
+    architecture = "transformer"
+
+    def __init__(self, mean, scale):
+        super().__init__(mean, scale)
+        width = 64
+        self.input_projection = nn.Sequential(nn.Linear(2 * len(mean), width), nn.LayerNorm(width),
+                                              nn.GELU(), nn.Dropout(0.15))
+        layer = nn.TransformerEncoderLayer(d_model=width, nhead=4, dim_feedforward=128,
+                                           dropout=0.15, activation="gelu", batch_first=True,
+                                           norm_first=True)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=4, norm=nn.LayerNorm(width),
+                                             enable_nested_tensor=False)
+        self.head = nn.Sequential(nn.Dropout(0.15), nn.Linear(width, 3))
+        frequencies = 10000 ** (-torch.arange(0, width, 2, dtype=torch.float32) / width)
+        phases = torch.arange(WINDOW)[:, None] * frequencies
+        positions = torch.stack((phases.sin(), phases.cos()), dim=-1).flatten(1)
+        self.register_buffer("positions", positions, persistent=False)
+
+    def forward(self, features, padding=None):
+        x = self.input_projection(self.standardized_inputs(features))
+        x = x + self.positions[:x.shape[1]].to(x.dtype)
+        return self.head(self.encoder(x, src_key_padding_mask=padding))
+
+
+ARCHITECTURES = {"gru": PossessionGRU, "transformer": PossessionTransformer}
 
 
 def visibility_features(ball, fps):
@@ -108,6 +146,7 @@ def batches(data, rng):
         selection = windows[start:start + BATCH_SIZE]
         x = np.full((len(selection), WINDOW, width), np.nan, dtype=np.float32)
         y = np.full((len(selection), WINDOW), metrics.X, dtype=np.int8)
+        padding = np.ones((len(selection), WINDOW), dtype=bool)
         for row, (index, offset) in enumerate(selection):
             normal, mirrored, labels = data[index]
             segment = slice(offset, offset + WINDOW)
@@ -115,12 +154,13 @@ def batches(data, rng):
             use_mirror = rng.random() < 0.5
             x[row, :len(targets)] = (mirrored if use_mirror else normal)[segment]
             y[row, :len(targets)] = mirror_labels[targets] if use_mirror else targets
-        yield x, y
+            padding[row, :len(targets)] = False
+        yield x, y, padding
 
 
 @torch.inference_mode()
-def recurrent_probabilities(model, normal, mirrored, fps, device):
-    # The RNN runs at 10 Hz. The official frame grid is restored before decoding.
+def sequence_probabilities(model, normal, mirrored, fps, device):
+    # Sequence inference runs at 10 Hz. Restore the official frame grid before decoding.
     frames = np.arange(0, len(normal), fps / SKILLCORNER_FPS)
     sample = np.minimum(np.rint(frames).astype(int), len(normal) - 1)
     central = WINDOW - 2 * CONTEXT
@@ -162,7 +202,7 @@ def evaluate(model, records, device=None):
             if device is None:
                 p = probabilities(model, normal[:, :BASE_FEATURES], mirrored[:, :BASE_FEATURES])
             else:
-                p = recurrent_probabilities(model, normal, mirrored, fps, device)
+                p = sequence_probabilities(model, normal, mirrored, fps, device)
             scores.append(score_half(p, labels, missing, fps))
         by_match.append(np.mean(scores, axis=0))
         total.extend(scores)
@@ -191,24 +231,28 @@ def fit(args):
         training = [half for job in jobs for half in job.result()]
         development = [job.result() for job in development_jobs]
         mean, scale = normalize(training)
-        model = PossessionGRU(mean, scale).to(device)
+        model = ARCHITECTURES[args.architecture](mean, scale).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=0.002, weight_decay=1e-3)
         criterion = nn.CrossEntropyLoss(ignore_index=metrics.X)
         best = -1.0
-        checkpoint = args.output / "gru.pt"
+        checkpoint = args.output / f"{args.architecture}.pt"
         ref_dev = evaluate(reference, development)
-        print(f"Training {sum(len(y) for _, _, y in training):,} sequence frames "
+        print(f"Training {args.architecture} on {sum(len(y) for _, _, y in training):,} sequence frames "
               f"across {len(train_ids)} matches; reference dev {ref_dev}", flush=True)
         history = []
         for epoch in range(1, EPOCHS + 1):
             model.train()
             losses = []
-            for features, labels in batches(training, rng):
+            for features, labels, padding in batches(training, rng):
                 x = torch.from_numpy(features).to(device)
                 y = torch.from_numpy(labels).to(device, dtype=torch.long)
                 optimizer.zero_grad(set_to_none=True)
-                output = model(x)
-                loss = criterion(output.flatten(0, 1), y.flatten())
+                pad = torch.from_numpy(padding).to(device) if args.architecture == "transformer" else None
+                amp = args.architecture == "transformer" and device.type == "cuda"
+                with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=amp):
+                    # Padding has no tracking frame. Missing-ball and X-labeled frames still attend.
+                    output = model(x, pad)
+                    loss = criterion(output.flatten(0, 1), y.flatten())
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), 2.0)
                 optimizer.step()
@@ -220,27 +264,30 @@ def fit(args):
             print(f"Epoch {epoch}: loss={torch.stack(losses).mean().item():.4f}, dev={dev}", flush=True)
             if dev["spell_f1"] > best:
                 best = dev["spell_f1"]
-                torch.save({"state": model.state_dict(), "epoch": epoch}, checkpoint)
+                torch.save({"state": model.state_dict(), "epoch": epoch,
+                            "architecture": args.architecture}, checkpoint)
         del training, development, jobs, development_jobs
         model, epoch = restore(checkpoint, device)
-        print(f"Frozen GRU epoch {epoch}, development spellF1 {best:.4f}", flush=True)
+        print(f"Frozen {args.architecture} epoch {epoch}, development spellF1 {best:.4f}", flush=True)
         sets = [("A-League", args.skillcorner, sorted(TEST_MATCHES), False),
                 ("A-League masked", args.skillcorner, sorted(TEST_MATCHES), True),
                 ("Bundesliga masked", args.idsse, IDSSE_TEST, True)]
         result = {}
         for name, root, split, stress in sets:
             records = list(pool.map(evaluation_halves, [root] * len(split), split, [stress] * len(split)))
-            result[name] = {"lightgbm": evaluate(reference, records), "gru": evaluate(model, records, device)}
+            result[name] = {"lightgbm": evaluate(reference, records),
+                            args.architecture: evaluate(model, records, device)}
             print(f"Held-out {name}: {result[name]}", flush=True)
     (args.output / "benchmark.json").write_text(json.dumps(
-        {"selected_epoch": epoch, "reference_development": ref_dev, "history": history, "held_out": result},
+        {"architecture": args.architecture, "selected_epoch": epoch,
+         "reference_development": ref_dev, "history": history, "held_out": result},
         indent=2) + "\n")
 
 
 def restore(path, device):
     payload = torch.load(path, map_location="cpu", weights_only=True)
     state = payload["state"]
-    model = PossessionGRU(state["mean"], state["scale"])
+    model = ARCHITECTURES[payload.get("architecture", "gru")](state["mean"], state["scale"])
     model.load_state_dict(state)
     return model.to(device).eval(), payload["epoch"]
 
@@ -252,10 +299,10 @@ def predict(args):
     labels = np.full(len(positions), "X")
     for _, start, last in half_video_blocks(GAME):
         normal, mirrored = sequence_features(positions[start:last + 1], None, teams, pitch, fps)
-        p = recurrent_probabilities(model, normal, mirrored, fps, device)
+        p = sequence_probabilities(model, normal, mirrored, fps, device)
         labels[start:last + 1] = decode_costs(np.log(np.maximum(p, 1e-6)), fps, *DECODER_COSTS)
     write_submission(args.output, labels)
-    print(f"Wrote {len(labels):,} contest frames using the GRU frozen at epoch {epoch}")
+    print(f"Wrote {len(labels):,} contest frames using {model.architecture} frozen at epoch {epoch}")
 
 
 if __name__ == "__main__":
@@ -266,6 +313,7 @@ if __name__ == "__main__":
     training.add_argument("--idsse", type=Path, required=True)
     training.add_argument("--reference", type=Path, required=True)
     training.add_argument("--workers", type=int, default=4)
+    training.add_argument("--architecture", choices=ARCHITECTURES, default="gru")
     inference = commands.add_parser("predict")
     inference.add_argument("--model", type=Path, required=True)
     inference.add_argument("--data-dir", type=Path)
