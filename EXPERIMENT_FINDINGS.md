@@ -54,6 +54,7 @@ used the public GT as training data.
 | 7 | MAE ball interpolation (linear replacement) | 0.3529 | 0.7092 | 0.5560 | yes* | Filled 9,736 frames vs linear's ~2,000; 17 possessions matches GT |
 | 8 | SoccerNet ball recovery (frozen detector) | 0.4000 | 0.6804 | 0.4339 | yes | 273 of 885 missing frames recovered; slightly worse than v4 |
 | 9 | Smart Tags full-interval dead-ball | 0.2581 | 0.6963 | — | yes | Tags are editorial windows, not frame-level; hurts spellF1 |
+| 10 | **Broadcast Missing Ball [NEW, BEST EXTERNAL SIGNAL]** | 0.4800 | **0.7825** | — | **yes** | 39.8% recall, 54.6% precision; frame accuracy +0.4% but spellF1 -2.3% due to fragmentation (1.14→1.19) |
 
 \* MAE interpolation trains on ball positions only, so it is compliant.
 Its spellF1 is lower than v4 because the extra filled positions dilute
@@ -157,3 +158,135 @@ To generate v5:
 
 The `--gbm-model` flag exists for a future, externally-trained model;
 no valid model file is shipped with this branch.
+
+## Broadcast Missing Ball Integration (2026-11-15)
+
+**Goal**: Use broadcast missing ball periods (replays/highlights) as dead ball signal
+
+**Implementation**:
+- Extracted 132 long missing runs (>2s) from broadcast tracking (49.5% of frames missing)
+- Aligned broadcast to tactical timeline via ball path matching
+- Generated dead ball evidence with ±1s window and exponential decay
+- Integrated into Viterbi decoder with weight 0.18
+
+**Results**: 
+- **Best external signal yet**: 39.8% recall, 54.6% precision (vs CALF 13.6%, SN-BAS-2025 similar)
+- Frame accuracy improved: 0.7792 → 0.7825 (+0.4%)
+- **BUT spellF1 decreased: 0.4914 → 0.4800 (-2.3%)**
+- Fragmentation increased: 1.14 → 1.19
+- 95 H→D corrections, 70 A→D regressions
+
+**Why frame accuracy ≠ spellF1**:
+- Adding D labels breaks up H/A possessions into shorter segments
+- More boundaries = more boundary errors
+- Shorter spells = harder to achieve high IoU
+- SpellF1 counts possessions, not frames
+
+**Conservative approach** (only boost existing D evidence): No improvement, reverts to v5
+
+**Root cause**: Same as CALF/SN-BAS-2025 — broadcast replays don't align perfectly with GT's possession definition. Replays often start during possession or extend past restart.
+
+**Conclusion**: v5 remains optimal. Broadcast is best external signal but frame-to-spell gap prevents improvement.
+
+**Documentation**: `BROADCAST_INTEGRATION_EXPERIMENT.md`
+
+## Ball Trajectory Physics (2026-11-16)
+
+**Approach**: Use ball trajectory physics to identify dead ball states:
+- Ball speed/acceleration patterns
+- Out-of-bounds detection
+- Trajectory quality assessment
+
+**Result**: **CATASTROPHIC FAILURE**
+- spellF1: 0.0594 (vs v5's 0.4914) → 88% WORSE
+- macroF1: 0.6409 (vs v5's 0.7323) → 12% worse  
+- Dead ball: 51.6% of frames (vs GT 0.7%)
+
+**Why it failed**: Physics correctly identifies actual dead ball states (ball stopped, out of bounds, missing). But GT doesn't label these as 'D' — it assigns them to the team that will restart play.
+
+**Example**: Ball goes out → physically dead, but GT labels it as H or A (the team taking throw-in).
+
+**Key lesson**: Same frame-to-spell gap as broadcast experiment. Adding physically correct 'D' labels fragments possessions, destroying spellF1.
+
+**Documentation**: `FINAL_OPTIMIZATION_ATTEMPTS.md`
+
+## Referee Hand Signals (2026-11-16) [IN PROGRESS]
+
+**Approach**: Detect referee raising hand in broadcast footage using YOLO11m-pose
+- Broadcast video: people clearly visible (6-9 per frame)
+- Tactical video: failed (bird's-eye view, people too small, 0 detections)
+- Map broadcast→tactical via alignment
+- Use as high-precision dead ball indicator
+
+**Status**: Scanning 18,525 frames (stride=5 from 92k aligned frames)
+
+**Estimated completion**: ~15 minutes
+
+**Why this might work**: Referee signals are ACTUAL officiating decisions, not heuristics. Could provide precision that physics/tracking cannot.
+
+**Next steps**: 
+1. Evaluate signal quality and frequency
+2. Tune blending weight in v5 decoder
+3. Test if precision > recall tradeoff helps spellF1
+
+**If this fails**: v5 (spellF1 0.4914) is our final submission. All tracking-only optimization paths exhausted.
+
+## Summary of All Attempts
+
+| # | Approach | spellF1 | macroF1 | Beats Baseline? | Notes |
+|---|----------|---------|---------|-----------------|-------|
+| 1-9 | (Previous experiments) | See above | See above | — | — |
+| 10 | Broadcast Missing Ball | 0.4800 | 0.7825 | no | Frame accuracy up, spellF1 down (fragmentation) |
+| 11 | Ball Trajectory Physics | 0.0594 | 0.6409 | **NO** | Catastrophic: over-detects D, fragments possessions |
+| 12 | Referee Hand Signals | pending | pending | pending | IN PROGRESS: scanning broadcast video |
+
+**v5 baseline remains unbeaten: spellF1 0.4914, macroF1 0.7323**
+
+---
+
+## FINAL UPDATE: Referee Hand Signals (2026-11-16)
+
+**Result**: 54 detections, **0% useful**
+
+**Detection Stats**:
+- Scanned: 18,526 broadcast frames (stride=5)
+- Detected: 54 frames with raised hands
+- Signal types: 87% both hands, 6% left, 7% right
+- Clusters: 4 distinct clusters (gap>50 frames)
+
+**Critical Finding**: ALL signals in unlabeled regions
+- 0% overlap with GT 'D' labels
+- 0% overlap with GT H/A labels  
+- 100% in 'X' (unlabeled) frames
+
+**Why This Happened**:
+- GT is only 3.76% labeled (7,500 / 199,319 frames)
+- 96.24% of frames are 'X' (unlabeled)
+- Referee signals occur in unlabeled segments
+- Cannot validate or improve predictions on unlabeled data
+
+**Conclusion**: Despite being actual officiating decisions, referee signals cannot improve our score because they don't align with any labeled ground truth.
+
+---
+
+## FINAL SUMMARY: All Optimization Paths Exhausted
+
+**12 approaches tested**:
+1-9. Previous experiments (see above)
+10. Broadcast Missing Ball → fragmentation (spellF1 -2.3%)
+11. Ball Trajectory Physics → catastrophic over-detection (spellF1 -88%)
+12. Referee Hand Signals → 100% in unlabeled regions (0% useful)
+
+**Blocked approaches**:
+- LSTM/supervised learning → would violate rules (training on test set)
+- Ensemble/multi-scale → incompatible with v5 pipeline
+
+**v5 (spellF1 0.4914, macroF1 0.7323) confirmed as final submission.**
+
+**Fundamental limitations identified**:
+1. Frame-to-spell gap (frame accuracy ≠ possession quality)
+2. GT labeling convention ≠ physical reality
+3. Sparse labels (3.76% coverage)
+4. Single-match test set (no training data)
+
+All rule-compliant optimization paths exhausted. See FINAL_RESULTS.md for complete analysis.
