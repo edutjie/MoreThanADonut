@@ -42,7 +42,7 @@ def idsse_training_rows(root, match):
     return result
 
 
-def prepare_evaluation(root, league, match):
+def evaluation_inputs(root, league, match):
     if league == "Bundesliga":
         halves = load_idsse(root, match)
         fps = IDSSE_FPS
@@ -50,12 +50,17 @@ def prepare_evaluation(root, league, match):
     else:
         halves = load_skillcorner(root, match)
         fps = SKILLCORNER_FPS
-    result = []
     for positions, weights, teams, pitch, labels in halves:
         ball = positions[:, -1]
         inside = ((ball > 0.5) & (ball < pitch - 0.5)).all(axis=1)
         if league == "Bundesliga":
             positions = mask_ball(positions, fps, rng, mean_gap=12, coverage=0.60)
+        yield positions, weights, teams, pitch, labels, inside, fps
+
+
+def prepare_evaluation(root, league, match):
+    result = []
+    for positions, weights, teams, pitch, labels, inside, fps in evaluation_inputs(root, league, match):
         normal, mirrored = tracking_features(positions, weights, teams, pitch, fps, LAG_SECONDS)
         result.append((normal, mirrored, labels, inside, fps))
     return result
