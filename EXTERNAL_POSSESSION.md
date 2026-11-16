@@ -109,10 +109,14 @@ cross-provider transfer under simulated, label-independent tracking loss.
 | --- | ---: | ---: |
 | v5 reproduction | 0.4914 | 0.7323 |
 | Frozen external model | 0.6250 | 0.8162 |
+| Frozen lagged LightGBM | 0.6452 | 0.8084 |
 
 The candidate was fixed before the public check. Format validation passed on all
 199,319 output frames. The scores here cover only the 7,500 labeled public
 frames and 17 possession spells. The private full-match score is unknown.
+Lagged LightGBM is the working reference for subsequent stoppage experiments.
+See [the YOLO recovery experiment](BALL_RECOVERY_EXPERIMENT.md) for the
+recovery comparisons.
 
 ## Reproduce
 
