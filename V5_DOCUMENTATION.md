@@ -1,5 +1,9 @@
 # v5 Documentation - What Was Missing from Handoffs
 
+v5 is a historical reference. See [the external possession experiment](EXTERNAL_POSSESSION.md)
+for the current candidate. Commit `cad89df` records public-window comparisons
+used to choose the v5 transition cost. See the restriction in [RULES.md](RULES.md).
+
 ## Critical Information Not Documented
 
 The v5 baseline (spellF1 0.4914, macroF1 0.7323) was generated with:
@@ -34,7 +38,7 @@ python tactical_baseline.py --tracking-only --output evaluation/results/improved
 | Configuration | spellF1 | macroF1 | Notes |
 |--------------|---------|---------|-------|
 | Default (with Smart Tags) | 0.3529 | 0.7092 | Uses event annotations |
-| **v5 (--tracking-only)** | **0.4914** | **0.7323** | **BEST - Final submission** |
+| **v5 (--tracking-only)** | **0.4914** | **0.7323** | Historical reference |
 | v5 + Ball Recovery | 0.4556 | 0.7039 | Worse (-7.3%) - recovery hurts |
 
 **Ball recovery tested and rejected**: Recovers 273 frames but increases fragmentation and reduces performance.

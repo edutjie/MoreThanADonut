@@ -1,13 +1,19 @@
 # Final Results: Possession Prediction Optimization
 
 **Date**: 2026-11-16  
-**Status**: All rule-compliant optimization paths exhausted
+**Status**: Historical v5 experiment report. See [the external possession
+experiment](EXTERNAL_POSSESSION.md) for the current candidate and verification.
 
 ---
 
-## Final Submission
+## v5 Reference
 
-**v5 Baseline** remains our best and final submission:
+**v5 Baseline** was the candidate at the end of this experiment. Commit
+`cad89df` records comparing transition costs against the public window.
+[The rules](RULES.md) reserve that window for pipeline checks. The external
+experiment uses v5 as a comparison reference.
+
+Historical public results:
 - **spellF1**: 0.4914
 - **macroF1**: 0.7323
 - **Beats competition baseline**: Yes (0.4914 > 0.4858)
@@ -148,25 +154,10 @@ The baseline includes:
 
 ---
 
-## Conclusion
+## Historical conclusions
 
-**v5 (spellF1 0.4914, macroF1 0.7323) is confirmed as the optimal solution within competition constraints.**
-
-All rule-compliant optimization paths have been exhausted:
-- ✅ 10 distinct approaches tested
-- ✅ External signals explored (SN-BAS-2025, CALF, broadcast, referee)
-- ✅ Heuristic refinements attempted (physics, ensemble, multi-scale)
-- ✅ Fundamental limitations identified and documented
-
-**Remaining paths are blocked**:
-- Supervised learning → requires training data (not provided)
-- Training on test set → violates rules
-- Signals in unlabeled regions → can't validate
-
-**The competition is fundamentally limited by**:
-1. Single test match (can't generalize)
-2. Sparse labels (3.76% coverage)
-3. Frame-to-spell gap (frame accuracy ≠ possession quality)
-4. GT convention ≠ physical reality
-
-v5 represents the ceiling for tracking-only heuristics on this dataset.
+The tested event and heuristic variants frequently fragmented possessions or
+disagreed with the label conventions at stoppages. The public window was too
+small to assess behavior over the rest of the match. The subsequent [external
+possession experiment](EXTERNAL_POSSESSION.md) uses other matches for selection
+and testing.
