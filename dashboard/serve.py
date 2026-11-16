@@ -21,6 +21,8 @@ CHUNK = 256
 RECOVERY_COLORS = ("#8fe4ab", "#6faeff", "#df9df2", "#f6c46e")
 BROADCAST_MAP = ROOT / "submissions/frozen-broadcast/frame-map.npz"
 FROZEN_PREDICTION = ROOT / "data/external_possession/skillcorner-frozen/possession.csv"
+CURRENT_BASELINE = ROOT / "data/external_possession/player-quality/final/candidate/possession.csv"
+CURRENT_BASELINE_NAME = "Current baseline · GRU with continuous player speeds · 0.6897 public spellF1"
 SKILLCORNER_SAMPLE = ROOT / "data/external_possession/skillcorner-sample.mp4"
 
 
@@ -312,6 +314,8 @@ def main():
     args = parser.parse_args()
     if args.prediction:
         files = args.prediction
+    elif CURRENT_BASELINE.is_file():
+        files = [(CURRENT_BASELINE_NAME, CURRENT_BASELINE)]
     elif FROZEN_PREDICTION.is_file():
         files = [("SkillCorner model · 0.6250 public spellF1", FROZEN_PREDICTION)]
     else:

@@ -69,7 +69,9 @@ intervals.
 
 The 199,319-frame CSV passed validation and reproduced byte for byte.
 The public window contains 7,500 graded frames and 17 possession spells.
-The original GRU remains the default.
+The original GRU was retained after this experiment. See the
+[current baseline](TACTICAL_BASELINE.md#current-experiment-baseline) for
+the subsequent player-tracking experiment.
 
 ## Reproduce
 

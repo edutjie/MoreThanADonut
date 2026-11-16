@@ -1,5 +1,8 @@
 # Player tracking quality in the possession models
 
+The retrained GRU with continuous player speeds is the
+[current experiment baseline](TACTICAL_BASELINE.md#current-experiment-baseline).
+
 Player coordinates influence ball-to-player distances, team visibility and
 player speed features. This experiment changes the tracking inputs used by
 the [GRU](SEQUENCE_POSSESSION.md) and the

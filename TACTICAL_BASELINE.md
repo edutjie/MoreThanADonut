@@ -1,5 +1,23 @@
 # Tactical possession baseline
 
+## Current experiment baseline
+
+Use the frozen [GRU with continuous player speeds](PLAYER_TRACK_QUALITY.md)
+for new possession comparisons. It scored 0.6897 spellF1 and 0.9002 macroF1
+in the automated public window check after selection on external matches.
+The checkpoint stores the same player-coordinate and speed handling used
+during training.
+
+```bash
+work=data/external_possession/player-quality
+.venv/bin/python sequence_possession.py predict \
+  --model "$work/continuous/gru.pt" --device cuda \
+  --output "$work/final/candidate/possession.csv"
+.venv/bin/python evaluation/validate_submission.py "$work/final/candidate/possession.csv"
+```
+
+## Tactical tracking and Smart Tags reference
+
 The baseline reads the tactical automatic tracking export and, if present, the
 automatic Smart Tagging XML. Unpack the official data bundle under `data/` or
 pass its root with `--data-dir`. The required files are

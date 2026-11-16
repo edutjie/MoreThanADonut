@@ -15,13 +15,17 @@ Open [the dashboard](http://127.0.0.1:8765) in a browser with H.264 support.
 Use `--data-dir /path/to/bundle` if the bundle is stored elsewhere. Repeat
 `--prediction "Track name" /path/to/predictions.csv` to add other runs.
 
+Without explicit prediction tracks, the dashboard uses the
+[current baseline](../TACTICAL_BASELINE.md#current-experiment-baseline)
+when its local prediction CSV is available.
+
 ## SkillCorner model and tracking replay
 
 The frozen histogram boosting model's 0.6578 spellF1 is the mean over four
 held-out A-League matches. Its contest timeline uses the separate 0.6250
 public-window check. When the frozen contest CSV is at
 `data/external_possession/skillcorner-frozen/possession.csv`, the dashboard
-loads it by default if no `--prediction` options are provided.
+can use it as a fallback when the current baseline CSV is unavailable.
 
 See [External Possession](../EXTERNAL_POSSESSION.md) to build the model and
 generate the CSV at that path. Install Pillow and FFmpeg with H.264 encoding
