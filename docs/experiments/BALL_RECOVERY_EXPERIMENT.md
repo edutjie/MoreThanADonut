@@ -86,7 +86,7 @@ The detector checkpoint used in this run has SHA-256
 `a3082fb435a8501ae17cfe4ac78e66ca7041205e115feda344d34d1693064f36`.
 The detector uses the tactical video locally. The projection, confidence
 threshold and temporal acceptance filter are the same as in
-[Tactical Baseline](TACTICAL_BASELINE.md). The sparse pass scans gap edges
+[Tactical Baseline](../../TACTICAL_BASELINE.md). The sparse pass scans gap edges
 within 0.2 seconds of original tracking and one consecutive frame pair per
 second inside long gaps, throughout both halves. Omit `--sparse` to run on
 every eligible missing frame.
@@ -94,14 +94,14 @@ every eligible missing frame.
 ```bash
 model=data/external_possession/lightgbm-lagged-4340d27.joblib
 work=data/external_possession/yolo-recovery
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python ball_recovery_experiment.py calibrate \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.ball_recovery_experiment calibrate \
   --idsse data/idsse --model "$model" --workers 4
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python ball_recovery_experiment.py calibrate \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.ball_recovery_experiment calibrate \
   --idsse data/idsse --model "$model" --workers 4 --informative-gaps
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python ball_recovery_experiment.py extract \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.ball_recovery_experiment extract \
   --device cuda --checkpoint models/yolo-sn-ball-opt.pt --sparse \
   --output "$work/sparse-atd-ball.csv"
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python ball_recovery_experiment.py predict \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.ball_recovery_experiment predict \
   --model "$model" --recoveries "$work/sparse-atd-ball.csv" --policy replace \
   --output "$work/candidate/possession.csv"
 python evaluation/validate_submission.py "$work/candidate/possession.csv"

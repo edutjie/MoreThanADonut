@@ -17,7 +17,8 @@ possession_by_frame.pkl
 # -- submissions -------------------------------------------------------------------------------
 # Any file in results/ is a set of labels for the whole match. A perfect one is a copy of the
 # ground truth, so the folder ships empty and stays that way.
-evaluation/results/*.csv
+evaluation/results/*
+!evaluation/results/README.md
 
 # ...with one deliberate exception. The baselines are computed from the ATD alone -- the same ATD
 # every enrolled participant has -- and never read a ground truth of any kind, so they carry no
@@ -26,14 +27,18 @@ evaluation/results/*.csv
 evaluation/reports/
 evaluation/scoreboard.csv
 submissions/
-models/*.pt
-models/*.ts
+/models/
+/catboost_info/
+/calf_features/
+/evaluation_results.txt
+/experiments/local/
 
 # -- gated data --------------------------------------------------------------------------------
 # data/ is committed empty, with only its README, so the folder participants are told to unpack
 # into actually exists in a fresh clone. Everything they put in it stays out of git.
 data/*
 !data/README.md
+/external_data/
 
 *.mp4
 *.gzip

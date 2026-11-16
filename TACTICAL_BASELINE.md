@@ -2,7 +2,7 @@
 
 ## Current experiment baseline
 
-Use the frozen [GRU with continuous player speeds](PLAYER_TRACK_QUALITY.md)
+Use the frozen [GRU with continuous player speeds](docs/experiments/PLAYER_TRACK_QUALITY.md)
 for new possession comparisons. It scored 0.6897 spellF1 and 0.9002 macroF1
 in the automated public window check after selection on external matches.
 The checkpoint stores the same player-coordinate and speed handling used

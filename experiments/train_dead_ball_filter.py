@@ -113,7 +113,7 @@ def train_dead_ball_filter():
     # Load SN-BAS-2025 extracted labels
     labels_file = Path('external_data/sn_bas_2025_labels.pkl')
     if not labels_file.exists():
-        print(f"ERROR: {labels_file} not found. Run extract_sn_bas_labels.py first.")
+        print(f"ERROR: {labels_file} not found. Run python -m experiments.extract_sn_bas_labels first.")
         return None
 
     with open(labels_file, 'rb') as f:

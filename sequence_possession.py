@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from ball_recovery_experiment import contest_tracking
+from experiments.ball_recovery_experiment import contest_tracking
 from evaluation import possession_metrics as metrics
 from external_possession import (
     DEV_MATCHES, IDSSE_FPS, LAG_SECONDS, SKILLCORNER_FPS, TEST_MATCHES, decode_costs,
@@ -18,7 +18,7 @@ from external_possession import (
     short_ball_dropouts, tracking_features,
 )
 from games import GAME, half_video_blocks
-from idsse_training import IDSSE_TEST
+from experiments.idsse_training import IDSSE_TEST
 from player_track_quality import corrupt_player_tracks, repair_player_tracks
 from possession_sources import LEGACY_MATCHES, load_legacy_skillcorner
 from starter.baseline import write_submission

@@ -1,6 +1,6 @@
 # Possession spell smoothing and Bundesliga YOLO check
 
-The [official scorer](evaluation/possession_metrics.py) treats every contiguous
+The [official scorer](../../evaluation/possession_metrics.py) treats every contiguous
 H or A interval as a possession spell. D separates spells. Same-team intervals
 are matched one to one by temporal intersection over union. The ranking
 metric averages F1 at thresholds 0.3, 0.4, 0.5, 0.6 and 0.7. A short
@@ -53,10 +53,10 @@ labels outside the 7,500 public frames. Public spellF1 and macroF1 remained
 data_root=data/external_possession
 base="$data_root/lightgbm-lagged-4340d27.joblib"
 work="$data_root/spell-smoothing"
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python spell_smoothing.py calibrate \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.spell_smoothing calibrate \
   --idsse data/idsse --skillcorner data/skillcorner-4340d27 --model "$base" \
   --output "$work/calibration.json" --workers 4
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python spell_smoothing.py predict \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.spell_smoothing predict \
   --model "$base" --calibration "$work/calibration.json" --output "$work/candidate/possession.csv"
 python evaluation/validate_submission.py "$work/candidate/possession.csv"
 python evaluation/run_evaluation.py --gt public --results "$work/candidate" \

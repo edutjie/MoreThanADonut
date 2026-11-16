@@ -55,7 +55,7 @@ CSV byte for byte, so the existing public score of 0.6452 still applies.
 ```bash
 work=data/external_possession/idsse-training
 base=data/external_possession/lightgbm-lagged-4340d27.joblib
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python bundesliga_dead_ball.py calibrate \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=4 python -m experiments.bundesliga_dead_ball calibrate \
   --idsse data/idsse --skillcorner data/skillcorner-4340d27 \
   --reference "$base" --specialist "$work/bundesliga.joblib" \
   --output "$work/dead-ball-specialist.json" --workers 4

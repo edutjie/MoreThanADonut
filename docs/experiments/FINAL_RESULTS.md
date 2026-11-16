@@ -10,7 +10,7 @@ experiment](EXTERNAL_POSSESSION.md) for the current candidate and verification.
 
 **v5 Baseline** was the candidate at the end of this experiment. Commit
 `cad89df` records comparing transition costs against the public window.
-[The rules](RULES.md) reserve that window for pipeline checks. The external
+[The rules](../../RULES.md) reserve that window for pipeline checks. The external
 experiment uses v5 as a comparison reference.
 
 Historical public results:

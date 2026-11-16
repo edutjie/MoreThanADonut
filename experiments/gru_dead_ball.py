@@ -9,15 +9,15 @@ import numpy as np
 import torch
 from lightgbm import LGBMClassifier
 
-from ball_recovery_experiment import contest_tracking
-from bundesliga_dead_ball import observed_motion
+from experiments.ball_recovery_experiment import contest_tracking
+from experiments.bundesliga_dead_ball import observed_motion
 from evaluation import possession_metrics as metrics
 from external_possession import (
     DEV_MATCHES, IDSSE_FPS, LAG_SECONDS, SKILLCORNER_FPS, TEST_MATCHES,
     decode_costs, load_idsse, load_skillcorner, mask_ball, tracking_features,
 )
 from games import GAME, half_video_blocks
-from idsse_training import IDSSE_DEV, IDSSE_TEST, IDSSE_TRAIN
+from experiments.idsse_training import IDSSE_DEV, IDSSE_TEST, IDSSE_TRAIN
 from player_track_quality import repair_player_tracks
 from possession_sources import load_legacy_skillcorner
 from sequence_possession import DECODER_COSTS, restore, sequence_probabilities, visibility_features

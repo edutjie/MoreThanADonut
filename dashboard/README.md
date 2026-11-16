@@ -27,7 +27,7 @@ public-window check. When the frozen contest CSV is at
 `data/external_possession/skillcorner-frozen/possession.csv`, the dashboard
 can use it as a fallback when the current baseline CSV is unavailable.
 
-See [External Possession](../EXTERNAL_POSSESSION.md) to build the model and
+See [External Possession](../docs/experiments/EXTERNAL_POSSESSION.md) to build the model and
 generate the CSV at that path. Install Pillow and FFmpeg with H.264 encoding
 support to render the **SkillCorner** page's 20-second tracking animation.
 It shows the ball, both teams, the source labels, and the frozen model's

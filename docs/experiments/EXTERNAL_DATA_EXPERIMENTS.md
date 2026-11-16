@@ -102,7 +102,7 @@ python external_possession.py train --skillcorner "$aleague" --legacy-skillcorne
 python sequence_possession.py train --skillcorner "$aleague" --legacy-skillcorner "$legacy" \
   --idsse "$idsse" --reference "$reference" --architecture gru --device cuda \
   --conditional-legacy --output "$work/gru-conditional"
-python external_stoppage_experiment.py --skillcorner "$aleague" --idsse "$idsse" \
+python -m experiments.external_stoppage_experiment --skillcorner "$aleague" --idsse "$idsse" \
   --reference "$reference" --metrica external_data/metrica-sample \
   --soccertrack external_data/soccertrack-v1.2 --output "$work/stoppage-soccertrack-10min"
 ```
