@@ -135,7 +135,7 @@ def add_tag_evidence(evidence, speed, confidence, near_line, tags, offset, fps):
     evidence += restart_support
 
 
-def decode(evidence, dead_entry=None, transitions=None):
+def decode(evidence, dead_entry=None, transitions=None, turnover_bonus=None):
     """Find the best half-wide sequence with explicit turnover and stoppage costs."""
     # Uniform cues can support the current state without creating a frame-level vote.
     if transitions is None:
@@ -146,6 +146,9 @@ def decode(evidence, dead_entry=None, transitions=None):
     score = evidence[0].copy()
     for frame in range(1, len(evidence)):
         options = score[:, None] - transitions
+        if turnover_bonus is not None:
+            options[0, 1] += turnover_bonus[frame]
+            options[1, 0] += turnover_bonus[frame]
         if dead_entry is not None:
             options[:2, 2] += dead_entry[frame]
         origin = options.argmax(axis=0)
