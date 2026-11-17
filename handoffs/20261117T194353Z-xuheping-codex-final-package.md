@@ -6,8 +6,8 @@
 - Repository: MoreThanADonut
 - Branch: codex/xuheping/final-submission-194353
 - Base commit: 6a6a8750ad577b506fd3ebe41de234adbd5382aa
-- Status: ready-for-handoff
-- Delivery: commit and PR publication pending
+- Status: completed
+- Delivery: shared; PR #6 to main
 - Objective: Package frozen learned spell scoring, reproduce CSV, document method, and open PR to main.
 - Owned paths: final/, this handoff
 - Recipient / integration owner: xuheping
@@ -20,7 +20,7 @@
 ## Changes by commit
 
 ### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-01
-- State: ready to commit
+- State: committed; dbcfa83032891bd3e12da173a915233f6914fca8
 - Changes: standalone final package, frozen weights, submission, methodology PDF and reproduction checks.
 - Validation: two complete CUDA reconstructions, including isolated final-only copy, exactly matched frozen SHA-256. Official validator passed 199319 rows; public scorer returned 0.720000 spellF1 / 0.918671 macroF1 on 7500 frames. All 29 existing tests passed. Artifact-tamper rejection passed. Exported transform exactly matched the original fitted transform on both orientations of both halves. PDF reader and visual render verified all three pages. Whitespace check passed.
 - Limits: CPU reconstruction differed on two H/A frames (D/X identical); command correctly failed checksum. Exact reproducibility verified on NVIDIA GB10, torch 2.15.0+cu132. Fresh dependency installation and other GPUs were not tested.
@@ -29,14 +29,28 @@
 
 - Target: main
 - Integration owner: xuheping
-- Publication: PR requested, pending
+- Publication: https://github.com/edutjie/MoreThanADonut/pull/6 (open)
 - Other work: existing untracked docs/plans and old training handoff preserved.
 
 ## Current outcome
 
 Standalone final/ includes the frozen submission, both TCN checkpoints, numeric transform, learned segment scorer, inference definitions, dependencies, checksums, README, and three-page methodology PDF with two schematic diagrams and their generator. No competition tracking, video, homography, recovered coordinates or private labels are included. The user-authorized model and submission artifacts are ordinary Git files (all below 2 MB each).
 
-- Source branch: codex/xuheping/final-submission-194353
+- Source branch: codex/xuheping/final-submission-194353; implementation head dbcfa83032891bd3e12da173a915233f6914fca8
 - Tested base/target: 6a6a8750ad577b506fd3ebe41de234adbd5382aa
 - Known conflicts: none; existing experiment worktrees and untracked work preserved.
 - Integration owner: xuheping; merge remains pending.
+
+### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-02
+- State: ready to commit
+- Changes: record verified publication and integration instructions.
+- Why: final package is shared in PR #6; merge remains the human integration owner's action.
+- Validation: GitHub returned the open PR with base main at 6a6a8750ad577b506fd3ebe41de234adbd5382aa and implementation head dbcfa83032891bd3e12da173a915233f6914fca8.
+- Risks / follow-up: merge pending; keep worktree and existing experiments.
+
+## Outstanding state
+
+- Uncommitted owned files: none after publication-record commit.
+- Other work: untracked docs/plans and prior training handoff remain untouched.
+- Delivery: final package committed and pushed; PR created, not merged; form submission not performed.
+- Continue: xuheping can review/merge PR #6 and submit final/Absolute Donut.csv plus final/Absolute Donut.pdf.
