@@ -183,7 +183,7 @@ def broadcast_data(path, info):
 
 
 def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broadcast_pixels=None,
-                skillcorner_video=None):
+                skillcorner_video=None, round_two_video=None):
     manifest = json.dumps(info, separators=(",", ":")).encode()
     broadcast_manifest = json.dumps(broadcast, separators=(",", ":")).encode()
     static = {
@@ -194,6 +194,9 @@ def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broad
         "/style.css": ("text/css; charset=utf-8", "style.css"),
         "/app.js": ("text/javascript; charset=utf-8", "app.js"),
     }
+
+    if round_two_video is not None:
+        static["/skillcorner/round-two"] = ("text/html; charset=utf-8", "round-two.html")
 
     class Handler(BaseHTTPRequestHandler):
         def do_HEAD(self):
@@ -217,6 +220,9 @@ def handler_for(info, pixels, video, broadcast=None, broadcast_video=None, broad
                     return
                 if path == "/skillcorner.mp4" and skillcorner_video and skillcorner_video.is_file():
                     self.stream_video(skillcorner_video, send_body)
+                    return
+                if path == "/skillcorner-round-two.mp4" and round_two_video and round_two_video.is_file():
+                    self.stream_video(round_two_video, send_body)
                     return
                 if path == "/match.json":
                     mime, body = "application/json", manifest
@@ -305,6 +311,8 @@ def main():
                         help="broadcast-to-tactical NPZ from broadcast_alignment.py")
     parser.add_argument("--skillcorner-sample", type=Path, default=SKILLCORNER_SAMPLE,
                         help="public tracking replay from dashboard.render_skillcorner")
+    parser.add_argument("--round-two-sample", type=Path,
+                        help="round-two TCN replay on held-out SkillCorner tracking")
     args = parser.parse_args()
     if args.prediction:
         files = args.prediction
@@ -350,7 +358,8 @@ def main():
                 print(f"Broadcast overlays unavailable: {error}", flush=True)
         with ThreadingHTTPServer(("127.0.0.1", args.port),
                                  handler_for(info, pixels, video, broadcast, broadcast_video,
-                                             broadcast_pixels, args.skillcorner_sample)) as server:
+                                             broadcast_pixels, args.skillcorner_sample,
+                                             args.round_two_sample)) as server:
             print(f"Tactical dashboard → http://127.0.0.1:{server.server_port}", flush=True)
             server.serve_forever()
     except (OSError, ValueError) as error:
