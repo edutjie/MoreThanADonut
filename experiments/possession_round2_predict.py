@@ -14,6 +14,7 @@ from experiments.possession_round2_decoder import Decoder
 from experiments.possession_round2_segments import likelihood, touch_features, touch_inputs
 from experiments.possession_round2_train import load, train_data
 from games import GAME, half_video_blocks
+from kickoff import decode_after_kickoff, kickoff_offset, match_kickoffs
 from player_track_quality import repair_player_tracks
 from sequence_possession import sequence_features
 from starter.baseline import write_submission
@@ -62,9 +63,18 @@ def main(args):
             touch[i] = likelihood(touch_features(physical[i], p, fps), decision["touch"])
     labels = np.full(len(tracking), "X")
     states = np.array(["H", "A", "D"])
-    for i, (_, start, end) in enumerate(blocks):
-        labels[start:end + 1] = states[decoded(decoder, emissions[i], fps, recipe,
-                                              decision["duration"], touch.get(i))]
+    kickoffs = match_kickoffs(args.data_dir, ball=tracking[:, -1]) if args.prekickoff else {}
+    for i, (half, start, end) in enumerate(blocks):
+        offset = kickoff_offset(kickoffs, half, start, end)
+
+        def decode_from(k, i=i):
+            cue = touch.get(i)
+            return states[decoded(decoder, emissions[i][k:], fps, recipe, decision["duration"],
+                                  None if cue is None else cue[k:])]
+
+        labels[start:end + 1] = decode_after_kickoff(decode_from, end + 1 - start, offset)
+        if args.prekickoff:
+            print(f"half {half}: kickoff {kickoffs.get(half)}, {offset} graded frames set to D")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write_submission(args.output, labels)
     print(f"{len(labels):,} frames, SHA-256 {fingerprint(args.output)}")
@@ -75,4 +85,6 @@ if __name__ == "__main__":
     for field in ("selection", "data-dir", "output", "observations"):
         parser.add_argument(f"--{field}", type=Path, required=field != "observations")
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--prekickoff", action="store_true",
+                        help="label graded frames before each detected kickoff D and decode from it")
     main(parser.parse_args())

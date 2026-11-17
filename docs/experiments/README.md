@@ -27,6 +27,7 @@ That folder is local to your checkout.
 - [Bundesliga dead-ball specialist](BUNDESLIGA_SPECIALIST.md)
 - [GRU with a dead-ball specialist](GRU_DEAD_BALL.md)
 - [Spell smoothing](SPELL_SMOOTHING.md)
+- [Pre-kickoff dead ball](PREKICKOFF.md)
 - [SoccerNet ball action spotting](SN_BAS_2025_EXPERIMENT.md)
 
 ## Broadcast comparisons
