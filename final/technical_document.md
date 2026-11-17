@@ -16,7 +16,7 @@ The algorithm reads tactical automatic tracking, slot-to-team metadata and autom
 
 ## 2. Method
 
-The inference pipeline has two temporal branches. The first estimates live/dead status; its dead-ball intervals remain fixed. The second estimates conditional home/away control on the remaining frames. A segment-scoring model combines several candidate control sequences into the final prediction.
+The inference pipeline uses two temporal models. The stoppage model estimates live/dead status and determines fixed dead-ball intervals. The spatial model estimates conditional home/away control on the remaining frames. A segment-scoring model combines several candidate control sequences into the final prediction.
 
 ![Inference architecture](figures/architecture.png)
 
@@ -24,7 +24,7 @@ The inference pipeline has two temporal branches. The first estimates live/dead 
 
 We construct 113 scalar features per frame from ball position, player-to-ball distances, team membership and coordinate differences over time. These are aggregate summaries of the available objects rather than one feature vector per identified player. For player i and ball b, proximity is the Euclidean distance between their metric coordinates. Team proximity features sort these distances within each team's available slots. Ball-boundary position is represented by the largest signed excursion beyond the four pitch lines: positive outside and negative inside.
 
-Before this branch's feature extraction, player positions held exactly constant for at least two seconds are marked missing. Short out-and-back spikes of at most 0.2 s are interpolated when their endpoints admit plausible motion. Ball gaps of at most 0.5 s are linearly interpolated only when bounded endpoints imply at most 32 m/s. Observation confidence is 1 for observed ball coordinates, 0.45 for accepted interpolation and 0 otherwise.
+Before extracting features for the stoppage model, player positions held exactly constant for at least two seconds are marked missing. Short out-and-back spikes of at most 0.2 s are interpolated when their endpoints admit plausible motion. Ball gaps of at most 0.5 s are linearly interpolated only when bounded endpoints imply at most 32 m/s. Observation confidence is 1 for observed ball coordinates, 0.45 for accepted interpolation and 0 otherwise.
 
 For offsets 0.2, 0.6, 1.5 and 4.0 s, speed is displacement divided by elapsed time, computed separately toward the past and future. Ball-speed measurements are unavailable whenever the measurement interval crosses a missing raw observation. Player-speed measurements are unavailable across discontinuous track intervals; finite speeds are capped at 12 m/s before team averaging. Lagged snapshots are obtained by shifting selected features into the past within the same half.
 
@@ -40,7 +40,7 @@ A fitted numeric transform preserves feature order and converts the ball-observe
 
 ### 2.2. Temporal stoppage classification and decoding
 
-A linear projection maps the 226 channels to width 48. Six residual one-dimensional convolutions with kernel width three and dilations 1, 2, 4, 8, 16 and 32 produce three state logits per sample. Gaussian error linear unit activations transform convolution outputs. Softmax converts the logits to H/A/D probabilities. Inference averages the ordinary prediction with a second prediction obtained by exchanging the home/away feature groups and mapping its outputs back to the original team order.
+A linear projection maps the 226 channels to width 48. Six residual one-dimensional convolutions with kernel width three and dilations 1, 2, 4, 8, 16 and 32 produce three state logits per sample. Gaussian error linear unit activations transform convolution outputs. Softmax converts the logits to H/A/D probabilities. Inference averages the ordinary prediction with a second prediction obtained by exchanging the home/away feature groups and mapping its outputs back to home/away order.
 
 Probabilities are linearly interpolated to the native 25 Hz grid. A Viterbi decoder maximizes accumulated log-probability with turnover cost 5 and live/dead transition cost 10. Evidence is multiplied by 10/fps to preserve the relative transition scale across frame rates. Staying in a state has zero transition cost. Directional physical-control cues adjust turnover cost with strength 2: sustained co-motion near the ball or an uncontested velocity change supports a new controlling team, while a fast ball continuing past a nearby player penalizes a switch. These cues require observed ball-motion windows.
 
@@ -75,7 +75,7 @@ A histogram gradient-boosted regressor predicts candidate quality using 150 boos
 
 Candidate segments form a directed acyclic graph: an edge joins two segments when their endpoints meet exactly and their teams differ. Dynamic programming selects a path maximizing the sum of candidate quality minus a per-segment penalty of 0.4. Each live interval is decoded independently. Every live frame is covered exactly once, consecutive live possessions alternate teams, and all fixed D/X frames are preserved.
 
-Possession therefore represents sustained team control across passes and loose-ball intervals. A brief proximity change during a challenge is insufficient by itself to force a turnover; the temporal probabilities and complete-segment objective determine whether a switch is supported. Restart timing follows the fixed stoppage boundaries, while the subsequent live team is assigned by the spatial branch and segment selector.
+Possession therefore represents sustained team control across passes and loose-ball intervals. A brief proximity change during a challenge is insufficient by itself to force a turnover; the temporal probabilities and complete-segment objective determine whether a switch is supported. Restart timing follows the fixed stoppage boundaries, while the subsequent live team is assigned by the spatial model and segment selector.
 
 ![Segment selection](figures/spell_selection.png)
 

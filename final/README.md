@@ -62,7 +62,7 @@ tested CPU run differed at two H/A frames and therefore correctly failed the
 checksum. Different accelerator kernels or dependency versions can also
 affect numerical boundaries; do not treat a failed checksum as exact reproduction.
 
-The existing official format check is also available from the repository root:
+The official format check is also available from the repository root:
 
 ```bash
 python evaluation/validate_submission.py "final/Absolute Donut.csv"
@@ -73,10 +73,10 @@ python evaluation/validate_submission.py "final/Absolute Donut.csv"
 | Path | Purpose |
 | --- | --- |
 | `reproduce.py` | Standalone inference entry point; uses only `final/src` and the included models |
-| `src/` | Snapshot of the existing tracking, feature, network and decoder definitions needed for inference |
-| `models/deadball/model.pt` | Original aggregate TCN for baseline H/A/D decoding |
+| `src/` | Tracking, feature, network and decoder definitions needed for inference |
+| `models/deadball/model.pt` | Aggregate TCN for stoppage estimation through H/A/D decoding |
 | `models/deadball/transform.json` | Exact exported numeric feature transform |
-| `models/deadball/features.joblib` | Original fitted AutoGluon transform, retained for provenance; not loaded during inference |
+| `models/deadball/features.joblib` | Fitted AutoGluon transform, retained for provenance; not loaded during inference |
 | `models/spatial/final-seed413.pt` | Frozen spatial TCN and its normalization statistics |
 | `models/spells/judge.joblib` | Externally fitted histogram gradient-boosted spell-quality regressor |
 | `models/spells/selection.json` | Frozen spell penalty and selection metadata |
@@ -85,15 +85,15 @@ python evaluation/validate_submission.py "final/Absolute Donut.csv"
 | `evaluation_tables.md`, `evaluation_summary.json` | Detailed evaluation tables and supporting aggregate results |
 | `figures/` | Architecture and illustrative spell-selection diagrams, as PNG and SVG |
 
-The original numeric feature generator retains 113 columns in order, converts
+The numeric feature generator retains 113 columns in order, converts
 column 111 to a Boolean comparison against 1, and leaves all other values
 unchanged, including NaNs. Its exported transform was checked for exact equality
-with the original fitted generator on both orientations of both full match halves.
+with the fitted AutoGluon generator on both orientations of both full match halves.
 This removes the AutoGluon runtime dependency without changing the submission.
 
 The included weights are small enough for ordinary Git; Git LFS is unnecessary.
 They are stored directly so a normal clone contains the inference artifacts.
-The original repository license is included as `LICENSE`.
+The source repository license is included as `LICENSE`.
 
 ## Evaluation
 
