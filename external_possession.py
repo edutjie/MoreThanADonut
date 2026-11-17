@@ -352,7 +352,7 @@ def train(root, output, workers, backend="hist", lags=(), legacy=None):
             best = int(means.argmax())
             selected = costs[best]
             print(f"Development costs and spellF1: {list(zip(costs, means.round(4).tolist()))}")
-            print(f"Frozen costs {selected}; dev v5 {np.mean([row[1] for row in dev]):.4f}; "
+            print(f"Frozen costs {selected}; dev tracking heuristic {np.mean([row[1] for row in dev]):.4f}; "
                   f"dev learned {means[best]:.4f}", flush=True)
             output.parent.mkdir(parents=True, exist_ok=True)
             joblib.dump((model, selected, lags) if lags else (model, selected), output)
@@ -360,8 +360,8 @@ def train(root, output, workers, backend="hist", lags=(), legacy=None):
                          for match_id in sorted(TEST_MATCHES)]
             test = list(measure(model, ((i, job.result()) for i, job in test_jobs), [selected]))
             for match_id, baseline, learned in test:
-                print(f"Test match {match_id}: v5 {baseline:.4f}, learned {learned[0]:.4f}")
-            print(f"Test mean: v5 {np.mean([row[1] for row in test]):.4f}, "
+                print(f"Test match {match_id}: tracking heuristic {baseline:.4f}, learned {learned[0]:.4f}")
+            print(f"Test mean: tracking heuristic {np.mean([row[1] for row in test]):.4f}, "
                   f"learned {np.mean([row[2][0] for row in test]):.4f}")
 
 
@@ -385,10 +385,10 @@ def check_transfer(root, model_path):
             evidence = tracking_evidence(masked, ball, confidence, teams, pitch, fps)[0]
             halves.append((normal, mirrored, labels, evidence, fps))
         _, baseline, learned = next(measure(model, [(match_id, halves)], [costs]))
-        print(f"Transfer match {match_id}: v5 {baseline:.4f}, learned {learned[0]:.4f}", flush=True)
+        print(f"Transfer match {match_id}: tracking heuristic {baseline:.4f}, learned {learned[0]:.4f}", flush=True)
         scores.append((baseline, learned[0]))
     baseline, learned = np.mean(scores, axis=0)
-    print(f"Transfer mean: v5 {baseline:.4f}, learned {learned:.4f}")
+    print(f"Transfer mean: tracking heuristic {baseline:.4f}, learned {learned:.4f}")
 
 
 def predict(model_path, data_dir, output):

@@ -1,5 +1,10 @@
 # Broadcast Missing Ball Integration Experiment
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 ## Objective
 Use extended broadcast ball missing periods (likely replays/highlights during dead ball) as additional dead ball signal to improve spellF1 beyond v5 (0.4914).
 

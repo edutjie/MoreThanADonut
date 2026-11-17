@@ -1,5 +1,10 @@
 # CALF Integration Experiment
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 ## Objective
 Integrate CALF event detection to improve dead ball detection and push spellF1 beyond v5 (0.4914).
 

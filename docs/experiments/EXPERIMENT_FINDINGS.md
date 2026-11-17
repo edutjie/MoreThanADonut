@@ -1,5 +1,10 @@
 # Training experiments: findings and limitations
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 This branch records experiments that attempted to improve on the
 tracking-only tactical baseline using machine-learning models.
 The headline finding is that several of the experiments **violated the

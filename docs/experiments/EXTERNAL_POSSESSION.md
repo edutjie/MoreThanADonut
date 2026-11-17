@@ -28,18 +28,16 @@ the final automated public-window check.
 ## Results
 
 The external comparisons use the organizer's spell metric per half, averaged
-over both halves and then over matches. The v5 tracking heuristic is a reference
-in these comparisons. Its emissions are scaled to preserve the effective
-smoothing time at the external sampling rate. It supplies no features, labels
-or parameters to the learned candidate.
+over both halves and then over matches. The historical v5 comparison has been
+retired because its settings were chosen on the public window. It supplied no
+features, labels, or parameters to the learned candidate.
 
-| A-League split | Matches | v5 spellF1 | Learned spellF1 |
-| --- | --- | ---: | ---: |
-| Development | 1886347, 1959846, 2006363, 2013725 | 0.5071 | 0.6902 |
-| Held-out test | 1925299, 1996435, 2007448, 2017461 | 0.4667 | 0.6578 |
+| A-League split | Matches | Learned spellF1 |
+| --- | --- | ---: |
+| Development | 1886347, 1959846, 2006363, 2013725 | 0.6902 |
+| Held-out test | 1925299, 1996435, 2007448, 2017461 | 0.6578 |
 
-The held-out gains were positive on all four matches. On the same development
-split, the learned classifier with zero transition costs scored 0.2845,
+On the same development split, the learned classifier with zero transition costs scored 0.2845,
 showing the effect of decoding entire spells.
 
 ### Boosting backends
@@ -101,13 +99,11 @@ format only.
 The frozen A-League model was also tested on seven IDSSE Bundesliga matches
 with official per-frame possession and ball-status labels. Synthetic ball
 dropouts used a mean gap of 12 seconds and expected visibility of 60%.
-Both methods saw the same masked frames. The learned model improved all
-seven matches, averaging 0.4078 spellF1 versus 0.2213 for v5. This measures
+The learned model averaged 0.4078 spellF1 on the masked matches. This measures
 cross-provider transfer under simulated, label-independent tracking loss.
 
 | Contest public window | spellF1 | macroF1 |
 | --- | ---: | ---: |
-| v5 reproduction | 0.4914 | 0.7323 |
 | Frozen external model | 0.6250 | 0.8162 |
 | Frozen lagged LightGBM | 0.6452 | 0.8084 |
 

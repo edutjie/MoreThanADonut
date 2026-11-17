@@ -24,6 +24,8 @@ BROADCAST_MAP = ROOT / "submissions/frozen-broadcast/frame-map.npz"
 FROZEN_PREDICTION = ROOT / "data/external_possession/skillcorner-frozen/possession.csv"
 CURRENT_BASELINE = ROOT / "data/external_possession/player-quality/final/candidate/possession.csv"
 CURRENT_BASELINE_NAME = "Current baseline · GRU with continuous player speeds · 0.6897 public spellF1"
+TCN_PREDICTION = ROOT / "data/external_possession/tcn-study/public/autotcn.csv"
+TCN_PREDICTION_NAME = "TCN with the frozen GRU’s features · 0.6815 public spellF1"
 SKILLCORNER_SAMPLE = ROOT / "data/external_possession/skillcorner-sample.mp4"
 
 
@@ -306,12 +308,16 @@ def main():
     args = parser.parse_args()
     if args.prediction:
         files = args.prediction
-    elif CURRENT_BASELINE.is_file():
-        files = [(CURRENT_BASELINE_NAME, CURRENT_BASELINE)]
-    elif FROZEN_PREDICTION.is_file():
-        files = [("SkillCorner model · 0.6250 public spellF1", FROZEN_PREDICTION)]
     else:
-        files = [("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv")]
+        files = []
+        if CURRENT_BASELINE.is_file():
+            files.append((CURRENT_BASELINE_NAME, CURRENT_BASELINE))
+        elif FROZEN_PREDICTION.is_file():
+            files.append(("SkillCorner model · 0.6250 public spellF1", FROZEN_PREDICTION))
+        if TCN_PREDICTION.is_file():
+            files.append((TCN_PREDICTION_NAME, TCN_PREDICTION))
+        if not files:
+            files.append(("Tactical baseline", ROOT / "evaluation/results/tactical_decoder.csv"))
     try:
         predictions = [(name, load_labels(Path(path), source_frames())) for name, path in files]
         print("Loading tracking and timeline…", flush=True)

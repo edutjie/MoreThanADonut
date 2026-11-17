@@ -1,5 +1,10 @@
 # H/A Attribution Error Analysis
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 ## Summary
 Analyzed 503 H/A attribution errors (8.3% of public window frames) to identify patterns and potential improvements.
 
