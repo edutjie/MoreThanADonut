@@ -1,0 +1,8 @@
+{
+  "feature_count": 113,
+  "boolean_columns": {
+    "111": 1.0
+  },
+  "other_columns": "identity, including NaN",
+  "source": "Frozen AutoGluon 1.5.0 numeric pipeline; no columns dropped or reordered"
+}

@@ -1,0 +1,5 @@
+recreated.csv
+__pycache__/
+*.so
+.venv/
+!Absolute Donut.pdf

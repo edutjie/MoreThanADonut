@@ -1,0 +1,164 @@
+{
+  "nested_external": {
+    "per_match": {
+      "reference": {
+        "dfl_J03WMX": 0.553795935534487,
+        "events_1": 0.693953104242423,
+        "dfl_J03WN1": 0.5483184852489655,
+        "events_2": 0.6735997223297121,
+        "dfl_J03WOH": 0.6426990910262057,
+        "events_3": 0.6982278577123117,
+        "dfl_J03WOY": 0.6117682048575607,
+        "dfl_J03WPY": 0.5877986579794331,
+        "dfl_J03WQQ": 0.6310174919931018,
+        "dfl_J03WR9": 0.6490806836368028
+      },
+      "learned": {
+        "dfl_J03WMX": 0.5636321693544979,
+        "events_1": 0.7078737168757572,
+        "dfl_J03WN1": 0.5620466066026433,
+        "events_2": 0.6909480272337294,
+        "dfl_J03WOH": 0.6640171733395206,
+        "events_3": 0.7058132533911519,
+        "dfl_J03WOY": 0.6214527421304177,
+        "dfl_J03WPY": 0.5949634018107237,
+        "dfl_J03WQQ": 0.6347199613073081,
+        "dfl_J03WR9": 0.6459016481230826
+      }
+    },
+    "provider_means": {
+      "dfl_": {
+        "reference": 0.6034969357537938,
+        "learned": 0.6123905289525992
+      },
+      "events_": {
+        "reference": 0.6885935614281489,
+        "learned": 0.7015449991668795
+      }
+    },
+    "source_balanced": {
+      "reference": 0.6460452485909713,
+      "learned": 0.6569677640597393
+    },
+    "folds": [
+      [
+        "dfl_J03WMX",
+        "events_1"
+      ],
+      [
+        "dfl_J03WN1",
+        "events_2"
+      ],
+      [
+        "dfl_J03WOH",
+        "events_3"
+      ],
+      [
+        "dfl_J03WOY",
+        "dfl_J03WPY"
+      ],
+      [
+        "dfl_J03WQQ",
+        "dfl_J03WR9"
+      ]
+    ],
+    "aggregation": "Average two halves and natural/corrupted conditions within each match, then average matches within each provider, then weight the two provider means equally."
+  },
+  "spatial_training": {
+    "dfl_": {
+      "games": 7,
+      "frames_5hz": 200534,
+      "supervised_frames_5hz": 200534
+    },
+    "events_": {
+      "games": 3,
+      "frames_5hz": 85987,
+      "supervised_frames_5hz": 83233
+    },
+    "aux_": {
+      "games": 20,
+      "frames_5hz": 591105,
+      "supervised_frames_5hz": 315102
+    }
+  },
+  "aggregate_tcn_aleague": {
+    "development": {
+      "spell_f1": 0.7066749595952821,
+      "macro_f1": 0.9207734286727729,
+      "dead_f1": 0.9548277070230561,
+      "in_pitch_dead_f1": 0.8824672936478748,
+      "gap_hits": 13,
+      "gap_spells": 37
+    },
+    "test_natural": {
+      "spell_f1": 0.6704283719572247,
+      "macro_f1": 0.9076685723697148,
+      "dead_f1": 0.9512303567638702,
+      "in_pitch_dead_f1": 0.8756340857249856,
+      "gap_hits": 12,
+      "gap_spells": 30
+    },
+    "test_corrupted": {
+      "spell_f1": 0.5945199003604418,
+      "macro_f1": 0.8691161337111697,
+      "dead_f1": 0.9330532625807628,
+      "in_pitch_dead_f1": 0.8263414475078669,
+      "gap_hits": 325,
+      "gap_spells": 590
+    },
+    "scope": "Aggregate TCN with H/A/D costs 5/10; does not evaluate the complete submission pipeline."
+  },
+  "public": [
+    {
+      "submission": "Absolute Donut",
+      "spell_f1_mean": "0.720000",
+      "macro_f1": "0.918671",
+      "accuracy": "0.925600",
+      "poss": "18",
+      "f1_D": "0.891584",
+      "trans_f1_25": "0.634146",
+      "n_graded": "7500"
+    },
+    {
+      "submission": "baseline_smooth125",
+      "spell_f1_mean": "0.424242",
+      "macro_f1": "0.581185",
+      "accuracy": "0.727467",
+      "poss": "16",
+      "f1_D": "0.146372",
+      "trans_f1_25": "0.166667",
+      "n_graded": "7500"
+    }
+  ],
+  "source_fingerprints": {
+    "spell-selection/external.json": "6ae38b300d0982df5668f61eb26c26d095bcc8953ece047143f4bc9e7176de98",
+    "tcn-study/autotcn/benchmark.json": "63542ca7d25954047532d077eab05fdc36e44a4cb697e2f2038f090e19c2c2d7",
+    "full-spatial-tcn/manifest.json": "dfd55ae1112bdf0fea7201d1d7536242f4e9444e3bafaff71f83519fe4a1c85c"
+  },
+  "public_baseline": {
+    "file": "evaluation/results/baseline_smooth125.csv",
+    "selection": "Highest official public spellF1 among all four released competition starter baselines",
+    "starter_scores": [
+      {
+        "submission": "baseline_smooth125",
+        "spell_f1_mean": "0.424242",
+        "macro_f1": "0.581185"
+      },
+      {
+        "submission": "baseline_smooth50",
+        "spell_f1_mean": "0.325581",
+        "macro_f1": "0.620733"
+      },
+      {
+        "submission": "baseline_smooth25",
+        "spell_f1_mean": "0.286792",
+        "macro_f1": "0.619991"
+      },
+      {
+        "submission": "baseline_raw",
+        "spell_f1_mean": "0.037838",
+        "macro_f1": "0.597227"
+      }
+    ]
+  }
+}
