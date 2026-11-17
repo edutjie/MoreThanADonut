@@ -42,7 +42,7 @@ Standalone final/ includes the frozen submission, both TCN checkpoints, numeric 
 - Integration owner: xuheping; merge remains pending.
 
 ### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-02
-- State: ready to commit
+- State: committed; b6017012cadf87d15ea74f36b754fef10de79df7
 - Changes: record verified publication and integration instructions.
 - Why: final package is shared in PR #6; merge remains the human integration owner's action.
 - Validation: GitHub returned the open PR with base main at 6a6a8750ad577b506fd3ebe41de234adbd5382aa and implementation head dbcfa83032891bd3e12da173a915233f6914fca8.
@@ -54,3 +54,10 @@ Standalone final/ includes the frozen submission, both TCN checkpoints, numeric 
 - Other work: untracked docs/plans and prior training handoff remain untouched.
 - Delivery: final package committed and pushed; PR created, not merged; form submission not performed.
 - Continue: xuheping can review/merge PR #6 and submit final/Absolute Donut.csv plus final/Absolute Donut.pdf.
+
+### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-03
+- State: ready to commit
+- Changes: explain nested external spellF1, scored data sources and source-balanced aggregation in README and methodology PDF; use first-person team wording at README opening. Refresh package checksums.
+- Why: distinguish external test games (seven DFL/IDSSE Bundesliga and three Metrica) from training-only SkillCorner A-League data, and explain inner parameter selection versus outer evaluation.
+- Validation: checked aggregation against experiment measure/source_mean functions and official spell metric; rebuilt and read three-page PDF; inspected rendered final page; all package checksums pass and submission CSV SHA-256 is unchanged.
+- Risks / follow-up: documentation only; no inference or evaluation rerun needed. Update existing PR #6.

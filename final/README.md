@@ -1,9 +1,9 @@
 # Absolute Donut — final submission
 
-Submit **[Absolute Donut.csv](Absolute%20Donut.csv)** and
-**[Absolute Donut.pdf](Absolute%20Donut.pdf)**. The method is **Learned spell scoring**.
+**Submitted submission:** [Absolute Donut.csv](Absolute%20Donut.csv), with our
+[technical document](Absolute%20Donut.pdf). Our method is **Learned spell scoring**.
 
-Team members, as supplied: Eduardus Tjitrahardja, Louis Jefferson Zhang,
+**Our team:** Absolute Donut. **Our members:** Eduardus Tjitrahardja, Louis Jefferson Zhang,
 Louis Jefferson Zhang, Louis Jefferson Zhang.
 
 The CSV has 199,319 data rows, with zero-based tactical-video frame indices
@@ -100,6 +100,34 @@ The original repository license is included as `LICENSE`.
 | --- | ---: | ---: |
 | Nested external benchmark | 0.656968 | — |
 | Official public window: 7,500 frames | **0.720000** | **0.918671** |
+
+**What is nested external spellF1?** It measures possession-segment accuracy
+on other matches held out from fitting, with a separate inner validation
+loop for choosing the spell penalty. "External" means these are other games,
+not the provided competition match. "Nested" means parameter selection happens
+inside the training portion of each outer test split.
+
+The scored external set consists of **seven DFL/IDSSE Bundesliga matches**
+and **three Metrica Sports sample matches**. The **20 SkillCorner A-League
+matches contribute training data only**; they do not contribute scores to
+the reported nested external spellF1.
+
+We split those ten primary external matches into five outer folds of two games.
+For each fold, the two test games are excluded from the neural normalization,
+neural training, spell-scorer fitting and penalty selection in this experiment.
+Inner neural fits and leave-one-training-match-out scorer validation use the
+other eight primary games to fit the scorer and choose the penalty. The
+twenty auxiliary games remain training-only. We then evaluate the frozen
+fold pipeline on its two outer test games.
+
+At each temporal intersection-over-union (IoU) threshold of 0.3, 0.4, 0.5,
+0.6 and 0.7, spellF1 matches predicted and target possessions one-to-one
+within the same team and computes their precision/recall F1. It averages
+those five F1 values. Our external benchmark then averages the two halves
+and natural/corrupted tracking conditions within each held-out match,
+averages matches within each provider, and gives the DFL and Metrica provider
+means equal weight. That produces **0.656968**. It is a segment-level F1,
+not 65.7% frame accuracy, and is separate from the **0.720000 public spellF1**.
 
 The public slice contains 17 target possessions; the submission predicts 18.
 Full-match private performance is unknown. Training and parameter selection use

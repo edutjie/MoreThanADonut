@@ -143,6 +143,27 @@ Sources and attribution:
 
 ## 5. Validation, reproduction and limits
 
+**Meaning of nested external spellF1.** "External" refers to other matches;
+"nested" refers to the inner parameter-selection loop inside each outer
+held-out evaluation fold described above. The scored set comprises seven
+DFL/IDSSE Bundesliga matches and three Metrica Sports sample matches. The
+20 SkillCorner A-League matches supply training data only and do not
+contribute to the reported external score. We evaluate on the two outer test
+games only after fitting the neural models and spell scorer and selecting
+the penalty without those games. The twenty auxiliary matches remain
+training-only. This separates the data used to choose parameters from the
+games used to measure each fold's performance.
+
+For each test half and tracking condition, spellF1 performs one-to-one,
+same-team matching between predicted and target possession segments at
+temporal intersection-over-union (IoU) thresholds 0.3, 0.4, 0.5, 0.6 and 0.7,
+computes precision/recall F1 at each threshold, and averages the five values.
+We average halves and natural/corrupted tracking conditions within each
+held-out match, then matches within each provider, and finally give the DFL
+and Metrica means equal weight. The resulting 0.656968 is a possession-segment
+F1 on external games, not frame accuracy or a score on the provided match.
+Prior experimental exposure still limits its interpretation as a blind test.
+
 The frozen learned method scored **0.656968 nested external spellF1**. On the
 official public window of 7,500 frames, it scored **0.720000 spellF1** and
 **0.918671 macroF1**, predicting 18 possessions against 17 targets. The public
