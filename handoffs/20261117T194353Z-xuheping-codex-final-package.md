@@ -56,8 +56,17 @@ Standalone final/ includes the frozen submission, both TCN checkpoints, numeric 
 - Continue: xuheping can review/merge PR #6 and submit final/Absolute Donut.csv plus final/Absolute Donut.pdf.
 
 ### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-03
-- State: ready to commit
+- State: committed; cc1585f
 - Changes: explain nested external spellF1, scored data sources and source-balanced aggregation in README and methodology PDF; use first-person team wording at README opening. Refresh package checksums.
 - Why: distinguish external test games (seven DFL/IDSSE Bundesliga and three Metrica) from training-only SkillCorner A-League data, and explain inner parameter selection versus outer evaluation.
 - Validation: checked aggregation against experiment measure/source_mean functions and official spell metric; rebuilt and read three-page PDF; inspected rendered final page; all package checksums pass and submission CSV SHA-256 is unchanged.
 - Risks / follow-up: documentation only; no inference or evaluation rerun needed. Update existing PR #6.
+
+### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-04
+- State: ready to commit
+- Changes: rewrite the technical document as a self-contained research methodology; derive 113 aggregate and 148 spatial features; add training, provider/match nested evaluation, A-League component and public-baseline tables. Correct all four authors in README, manifest and PDF metadata. Add aggregate evaluation evidence and refresh checksums.
+- Why: readers should understand the submitted algorithm without development context; distinguish training-only A-League data from primary validation and component results from complete-pipeline results.
+- Validation: re-ran official public evaluator on frozen final CSV and published baseline_smooth50.csv: 0.720000 / 0.918671 versus 0.325581 / 0.620733 spellF1 / macroF1. Verified provider averaging and external frame-count totals against saved reports; checked feature-count arithmetic against implementation. Read and visually reviewed all six PDF pages, including seven tables; confirmed four corrected author names and PDF metadata. All local documentation links and package checksums pass; submission SHA-256 unchanged.
+- Limits: no independent A-League holdout for the complete submission (all twenty auxiliary games used in spatial training); available aggregate-TCN component tests are labeled explicitly. Inference code/weights unchanged; no model retraining or inference rerun needed.
+- Accepted correction: user replaced repeated author entries with Eduardus Tjitrahardja, Louis Jefferson Zhang, Stuart Davis Tioniwar and Joel Van Doli Marpaung.
+- Delivery: update PR #6; merge remains pending. Current methodology is six pages, superseding the initial three-page document.

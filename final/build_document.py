@@ -14,7 +14,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Table, TableStyle
 
 ROOT = Path(__file__).resolve().parent
 FIGURES = ROOT / "figures"
@@ -106,32 +106,75 @@ def main():
         pdfmetrics.registerFont(TTFont(name, str(fontroot/file)))
     pdfmetrics.registerFontFamily("DejaVu", normal="DejaVu", bold="DejaVu-Bold",
                                   italic="DejaVu-Oblique", boldItalic="DejaVu-BoldOblique")
-    body = ParagraphStyle("BodyFinal", fontName="DejaVu", fontSize=9, leading=12.6,
+    body = ParagraphStyle("BodyFinal", fontName="DejaVu", fontSize=9, leading=12,
                           textColor=colors.HexColor(NAVY), spaceAfter=7, alignment=TA_LEFT)
     heading = ParagraphStyle("HeadingFinal", parent=body, fontName="DejaVu-Bold", fontSize=12,
                              leading=16, spaceBefore=12, spaceAfter=7, keepWithNext=True)
+    subheading = ParagraphStyle("SubheadingFinal", parent=heading, fontSize=10.5, leading=14, spaceBefore=10)
     title = ParagraphStyle("TitleFinal", parent=heading, fontSize=21, leading=26, spaceBefore=0, spaceAfter=12)
     caption = ParagraphStyle("CaptionFinal", parent=body, fontSize=8, leading=11, textColor=colors.HexColor("#536778"))
     story = []
     lines = (ROOT/"technical_document.md").read_text().splitlines()
     paragraph = []
+    table_rows = []
 
     def flush():
         if paragraph:
             story.append(Paragraph(markup(" ".join(paragraph)), body))
             paragraph.clear()
 
+    def flush_table():
+        if not table_rows:
+            return
+        table_style = ParagraphStyle("TableFinal", parent=body, fontSize=7.5, leading=10, spaceAfter=0)
+        cells = [[Paragraph(markup(value), table_style) for value in row] for row in table_rows]
+        header = table_rows[0]
+        if len(header) == 3:
+            widths = [120, 45, 335]
+        elif header[0] == "Training source":
+            widths = [110, 45, 75, 130, 140]
+        elif header[0] == "Method":
+            widths = [155, 70, 75, 65, 65, 70]
+        else:
+            widths = [180, 45, 90, 90, 95]
+        table = Table(cells, colWidths=widths, repeatRows=1, hAlign="LEFT")
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9f0f5")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (0, 0), (-1, 0), .7, colors.HexColor(NAVY)),
+            ("LINEBELOW", (0, 1), (-1, -1), .3, colors.HexColor("#d7e1e8")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("SPACEAFTER", (0, 0), (-1, -1), 9),
+        ]))
+        story.append(table)
+        table_rows.clear()
+
     for line in lines:
-        if line.startswith("# "):
+        if line.startswith("|"):
+            flush()
+            row = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if not all(re.fullmatch(r":?-+:?", cell) for cell in row):
+                table_rows.append(row)
+            continue
+        flush_table()
+        if line == "![Inference architecture](figures/architecture.png)":
+            flush()
+            story.extend([Image(str(FIGURES/"architecture.png"), width=500, height=162),
+                          Paragraph("Figure 1. Frozen inference architecture for frame-level possession recognition.", caption)])
+        elif line == "![Segment selection](figures/spell_selection.png)":
+            flush()
+            story.extend([Image(str(FIGURES/"spell_selection.png"), width=500, height=137),
+                          Paragraph("Figure 2. Schematic candidate paths and complete-coverage segment selection; no match data are shown.", caption)])
+        elif line.startswith("### "):
+            flush()
+            story.append(Paragraph(markup(line[4:]), subheading))
+        elif line.startswith("# "):
             flush(); story.append(Paragraph(markup(line[2:]), title))
         elif line.startswith("## "):
             flush()
-            if line.startswith("## 2."):
-                story.extend([Image(str(FIGURES/"architecture.png"), width=500, height=162),
-                              Paragraph("Figure 1. Two frozen TCNs separate stoppage timing from live possession selection.", caption)])
-            if line.startswith("## 4."):
-                story.extend([Image(str(FIGURES/"spell_selection.png"), width=500, height=137),
-                              Paragraph("Figure 2. Candidate paths share fixed dead-ball boundaries. The selected path covers live frames without gaps.", caption)])
             story.append(Paragraph(markup(line[3:]), heading))
         elif not line.strip():
             flush()
@@ -140,10 +183,11 @@ def main():
         else:
             paragraph.append(line)
     flush()
+    flush_table()
     doc = SimpleDocTemplate(str(ROOT/"Absolute Donut.pdf"), pagesize=A4,
                             rightMargin=46, leftMargin=46, topMargin=43, bottomMargin=43,
                             title="Absolute Donut — Learned spell scoring",
-                            author="Eduardus Tjitrahardja; Louis Jefferson Zhang; Louis Jefferson Zhang; Louis Jefferson Zhang")
+                            author="Eduardus Tjitrahardja; Louis Jefferson Zhang; Stuart Davis Tioniwar; Joel Van Doli Marpaung")
 
     def footer(canvas, doc):
         canvas.saveState()
