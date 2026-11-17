@@ -120,13 +120,13 @@
       "n_graded": "7500"
     },
     {
-      "submission": "Competition baseline",
-      "spell_f1_mean": "0.325581",
-      "macro_f1": "0.620733",
-      "accuracy": "0.713200",
-      "poss": "26",
-      "f1_D": "0.322548",
-      "trans_f1_25": "0.081633",
+      "submission": "baseline_smooth125",
+      "spell_f1_mean": "0.424242",
+      "macro_f1": "0.581185",
+      "accuracy": "0.727467",
+      "poss": "16",
+      "f1_D": "0.146372",
+      "trans_f1_25": "0.166667",
       "n_graded": "7500"
     }
   ],
@@ -134,5 +134,31 @@
     "spell-selection/external.json": "6ae38b300d0982df5668f61eb26c26d095bcc8953ece047143f4bc9e7176de98",
     "tcn-study/autotcn/benchmark.json": "63542ca7d25954047532d077eab05fdc36e44a4cb697e2f2038f090e19c2c2d7",
     "full-spatial-tcn/manifest.json": "dfd55ae1112bdf0fea7201d1d7536242f4e9444e3bafaff71f83519fe4a1c85c"
+  },
+  "public_baseline": {
+    "file": "evaluation/results/baseline_smooth125.csv",
+    "selection": "Highest official public spellF1 among all four released competition starter baselines",
+    "starter_scores": [
+      {
+        "submission": "baseline_smooth125",
+        "spell_f1_mean": "0.424242",
+        "macro_f1": "0.581185"
+      },
+      {
+        "submission": "baseline_smooth50",
+        "spell_f1_mean": "0.325581",
+        "macro_f1": "0.620733"
+      },
+      {
+        "submission": "baseline_smooth25",
+        "spell_f1_mean": "0.286792",
+        "macro_f1": "0.619991"
+      },
+      {
+        "submission": "baseline_raw",
+        "spell_f1_mean": "0.037838",
+        "macro_f1": "0.597227"
+      }
+    ]
   }
 }

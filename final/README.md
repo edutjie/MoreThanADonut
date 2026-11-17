@@ -194,10 +194,10 @@ These results evaluate the aggregate TCN checkpoint with its H/A/D decoder at tu
 
 | Method | spellF1 | macroF1 | Accuracy | Spells | D-F1 |
 | --- | --- | --- | --- | --- | --- |
-| Competition baseline | 0.325581 | 0.620733 | 0.713200 | 26 | 0.322548 |
+| Best starter baseline (public spellF1) | 0.424242 | 0.581185 | 0.727467 | 16 | 0.146372 |
 | Absolute Donut | 0.720000 | 0.918671 | 0.925600 | 18 | 0.891584 |
 
-The competition baseline is the published `baseline_smooth50.csv`: nearest-player team assignment with a centered 50-frame majority vote. Both files were scored with the same official evaluator on the same 7,500 public frames. The target contains 17 possessions. Our submission improves spellF1 by 0.394419 and macroF1 by 0.297938. D-F1 is dead-ball F1; full-match private performance is unknown.
+The comparison uses `baseline_smooth125.csv`, the highest-scoring of the four competition starter baselines by public spellF1. It assigns the nearest player's team and applies a centered 125-frame majority vote. Both files were scored with the same official evaluator on the same 7,500 public frames. The target contains 17 possessions. Our submission improves spellF1 by 0.295758 and macroF1 by 0.337486. D-F1 is dead-ball F1; full-match private performance is unknown.
 
 ## Rebuild the short document
 

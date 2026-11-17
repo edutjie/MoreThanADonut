@@ -166,7 +166,7 @@ def main():
             flush()
             story.extend([Image(str(FIGURES/"architecture.png"), width=500, height=162),
                           Paragraph("Figure 1. Frozen inference architecture for frame-level possession recognition.", caption)])
-        elif line == "![Segment selection](figures/spell_selection.png)":
+        elif line == "![Segment selection](figures/spell_selection.svg)":
             flush()
             story.extend([Image(str(FIGURES/"spell_selection.png"), width=500, height=137),
                           Paragraph("Figure 2. Schematic candidate paths and complete-coverage segment selection; no match data are shown.", caption)])

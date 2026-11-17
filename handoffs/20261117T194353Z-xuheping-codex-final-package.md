@@ -79,8 +79,15 @@ Standalone final/ includes the frozen submission, both TCN checkpoints, numeric 
 - Risks / follow-up: documentation only; update PR #6.
 
 ### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-06
-- State: ready to commit
+- State: committed; dd35135
 - Changes: condense the technical paper from six pages to three, retaining self-contained feature construction, method, training data, nested validation and headline public results. Detailed per-match and component tables remain in README and evaluation_tables.md.
 - Why: the user requested a short, direct technical paper.
 - Validation: rebuilt and read the three-page PDF, checked page layout, author names, core feature counts and reported scores; package checksums and staged whitespace checks pass; submission unchanged.
 - Risks / follow-up: documentation only; update PR #6. The three-page paper supersedes the six-page version.
+
+### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-07
+- State: ready to commit
+- Changes: restore spell-selection illustration with SVG link in paper source; update public comparison to baseline_smooth125, the highest public-spellF1 competition starter. Update README, tables, aggregate evidence and checksums.
+- Why: requested figure and strongest starter comparison, while keeping the paper three pages.
+- Validation: official scorer evaluated all four starters and frozen final CSV: smooth125 spellF1 0.424242 / macroF1 0.581185, final 0.720000 / 0.918671. PDF remains three pages with both figures; text and visual layout checked. Package checksums pass; submission unchanged.
+- Risks / follow-up: documentation only; update PR #6.

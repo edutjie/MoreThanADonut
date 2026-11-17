@@ -40,6 +40,8 @@ A histogram gradient-boosted regressor scores each candidate. Its target is the 
 
 Dynamic programming joins candidates only at identical endpoints with alternating teams, maximizing the sum of predicted quality minus 0.4 per segment. The resulting path covers every live frame exactly once and preserves all D/X frames. Temporal evidence therefore carries possession across passes and loose balls without forcing a switch at every proximity change.
 
+![Segment selection](figures/spell_selection.svg)
+
 ## 2. Training and validation
 
 | Training source | Games | Supervision and use |
@@ -61,10 +63,10 @@ SpellF1 averages one-to-one, same-team possession-matching F1 over IoU threshold
 | Nested DFL/IDSSE | 7 games | 0.612391 | — |
 | Nested Metrica | 3 games | 0.701545 | — |
 | Nested equal-provider mean | 10 games | 0.656968 | — |
-| Public competition baseline | 7,500 frames | 0.325581 | 0.620733 |
+| Public best starter baseline | 7,500 frames | 0.424242 | 0.581185 |
 | Public Absolute Donut | 7,500 frames | 0.720000 | 0.918671 |
 
-The public baseline is the competition's published `baseline_smooth50.csv`. Both submissions were scored with the same official evaluator; our output contains 18 public possessions versus 17 targets. Public labels are used only for automated checks after freezing the method. The aggregate TCN component scored 0.670428 spellF1 on four natural A-League test games; the complete submission has no independent A-League holdout because the spatial model uses all 20 games for training. Detailed component and per-match tables accompany the code.
+The comparison uses `baseline_smooth125.csv`, the highest public spellF1 among the four competition starter baselines; it applies a centered 125-frame majority vote. Both submissions were scored with the same official evaluator; our output contains 18 public possessions versus 17 targets. Public labels are used only for automated checks after freezing the method. The aggregate TCN component scored 0.670428 spellF1 on four natural A-League test games; the complete submission has no independent A-League holdout because the spatial model uses all 20 games for training. Detailed component and per-match tables accompany the code.
 
 ## 4. Reproduction and limitations
 
