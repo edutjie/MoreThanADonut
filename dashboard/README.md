@@ -19,6 +19,13 @@ Without explicit prediction tracks, the dashboard uses the
 [current baseline](../TACTICAL_BASELINE.md#current-experiment-baseline)
 when its local prediction CSV is available.
 
+The dashboard also adds **TCN with the frozen GRU’s features** (0.6815 public
+spellF1) when `data/external_possession/tcn-study/public/autotcn.csv` exists.
+To add it to an explicit set of tracks, include
+`--prediction "TCN with the frozen GRU’s features" data/external_possession/tcn-study/public/autotcn.csv`.
+See the [TCN experiment](../docs/experiments/TCN_AUTOML_FOUNDATION.md#reproduce)
+for the frozen inference command.
+
 ## SkillCorner model and tracking replay
 
 The frozen histogram boosting model's 0.6578 spellF1 is the mean over four
