@@ -135,6 +135,8 @@ Full-match private performance is unknown. Training and parameter selection use
 external matches; the public labels are only an automated evaluation check.
 The external benchmark has prior experimental exposure and is not a fresh blind test.
 
+The [short technical paper](Absolute%20Donut.pdf) summarizes the method and headline results in three pages. The detailed tables below provide supporting evaluation results.
+
 ## Detailed evaluation tables
 
 ### Training data

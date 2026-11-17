@@ -129,7 +129,9 @@ def main():
         table_style = ParagraphStyle("TableFinal", parent=body, fontSize=7.5, leading=10, spaceAfter=0)
         cells = [[Paragraph(markup(value), table_style) for value in row] for row in table_rows]
         header = table_rows[0]
-        if len(header) == 3:
+        if len(header) == 4:
+            widths = [190, 110, 100, 100]
+        elif len(header) == 3:
             widths = [120, 45, 335]
         elif header[0] == "Training source":
             widths = [110, 45, 75, 130, 140]

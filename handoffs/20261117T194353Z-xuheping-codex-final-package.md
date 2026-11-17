@@ -72,8 +72,15 @@ Standalone final/ includes the frozen submission, both TCN checkpoints, numeric 
 - Delivery: update PR #6; merge remains pending. Current methodology is six pages, superseding the initial three-page document.
 
 ### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-05
-- State: ready to commit
+- State: committed; 60957db
 - Changes: replace contextual model terminology with explicitly named stoppage/spatial models, and remove development-history adjectives from the final README. Rebuild PDF and refresh checksums.
 - Why: the methodology must stand alone for readers without project context.
 - Validation: wording scan, PDF text check, package checksums and staged whitespace checks; submission SHA-256 unchanged.
 - Risks / follow-up: documentation only; update PR #6.
+
+### 20261117T194353Z-xuheping-codex-final-package-morethanadonut-06
+- State: ready to commit
+- Changes: condense the technical paper from six pages to three, retaining self-contained feature construction, method, training data, nested validation and headline public results. Detailed per-match and component tables remain in README and evaluation_tables.md.
+- Why: the user requested a short, direct technical paper.
+- Validation: rebuilt and read the three-page PDF, checked page layout, author names, core feature counts and reported scores; package checksums and staged whitespace checks pass; submission unchanged.
+- Risks / follow-up: documentation only; update PR #6. The three-page paper supersedes the six-page version.
