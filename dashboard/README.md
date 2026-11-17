@@ -122,3 +122,23 @@ select another map. To generate a map from the supplied automatic tracking:
 - Use the viewer for data and playback alignment checks. Competition
   predictions remain algorithmic and the public labels are for pipeline
   checks only.
+
+## Round-two TCN review
+
+Render the frozen seed-733 checkpoint on the same held-out A-League clip as
+the SkillCorner page. The replay shows the source label, predicted label and
+tracking overlay.
+
+```bash
+run=data/external_possession/round2-20261117
+CUBLAS_WORKSPACE_CONFIG=:4096:8 .venv/bin/python -m dashboard.render_skillcorner \
+  --skillcorner external_data/skillcorner-4340d27 \
+  --round-two-selection "$run/decision-before-public.json" \
+  --output "$run/skillcorner-review.mp4"
+.venv/bin/python -m dashboard.serve --port 8768 \
+  --round-two-sample "$run/skillcorner-review.mp4"
+```
+
+Open [Round-two TCN](http://127.0.0.1:8768/skillcorner/round-two). The frozen
+checkpoint and decision come from the
+[round-two experiment](../docs/experiments/POSSESSION_IMPROVEMENT.md).

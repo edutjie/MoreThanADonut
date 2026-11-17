@@ -16,6 +16,7 @@
       <a href="/broadcast">Broadcast</a>
       <a href="/aligned">Aligned</a>
       <a href="/skillcorner" aria-current="page">SkillCorner</a>
+      <a href="/skillcorner/round-two" id="round-two-link" hidden>Round-two TCN</a>
     </nav>
   </header>
   <main>
@@ -41,6 +42,9 @@
     </section>
   </main>
   <script>
+    fetch("/skillcorner/round-two", {method: "HEAD"}).then(response => {
+      if (response.ok) document.querySelector("#round-two-link").hidden = false;
+    });
     const replay = document.querySelector("#replay");
     replay.addEventListener("error", () => {
       replay.hidden = true;

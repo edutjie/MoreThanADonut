@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Round-two TCN · MoreThanADonut</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Round-two TCN</h1>
+    <p>A-League + Bundesliga training · seed 733</p>
+    <nav class="feeds" aria-label="Match views">
+      <a href="/">Tactical</a>
+      <a href="/broadcast">Broadcast</a>
+      <a href="/aligned">Aligned</a>
+      <a href="/skillcorner">SkillCorner</a>
+      <a href="/skillcorner/round-two" aria-current="page">Round-two TCN</a>
+    </nav>
+  </header>
+  <main>
+    <section class="monitor sample" aria-label="SkillCorner tracking replay">
+      <div class="stage">
+        <video id="replay" controls playsinline preload="metadata" aria-label="Animated A-League tracking"></video>
+        <p class="transport" id="replay-error" role="status" hidden>
+          Replay unavailable. Generate the sample with dashboard.render_skillcorner.
+        </p>
+      </div>
+      <div class="sample-caption">
+        <h2>Held-out SkillCorner replay</h2>
+        <p>Compare the source label and TCN prediction below the pitch. The purple banner marks a source-labeled stoppage, and a hollow yellow dot marks an extrapolated ball position.</p>
+        <div class="legend" aria-label="Replay colors">
+          <span class="home">Home team</span>
+          <span class="away">Away team</span>
+          <span class="ball">Ball</span>
+          <span class="dead">Stopped play</span>
+        </div>
+        <p><strong>0.6346 spellF1</strong> across six external holdout matches.
+          <a href="https://github.com/SkillCorner/opendata">SkillCorner Open Data</a></p>
+      </div>
+    </section>
+  </main>
+  <script>
+    const replay = document.querySelector("#replay");
+    replay.addEventListener("error", () => {
+      replay.hidden = true;
+      document.querySelector("#replay-error").hidden = false;
+    });
+    replay.src = "/skillcorner-round-two.mp4";
+  </script>
+</body>
+</html>
