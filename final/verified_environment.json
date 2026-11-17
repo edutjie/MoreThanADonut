@@ -1,0 +1,9 @@
+{
+  "python": "3.12.3",
+  "os": "Linux-6.17.0-1018-nvidia-aarch64-with-glibc2.39",
+  "torch": "2.15.0+cu132",
+  "cuda": "13.2",
+  "cudnn": 92600,
+  "gpu": "NVIDIA GB10",
+  "cc": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+}

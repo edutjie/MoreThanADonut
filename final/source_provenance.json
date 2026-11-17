@@ -1,0 +1,191 @@
+{
+  "src/evaluation/possession_metrics.py": {
+    "source_module": "evaluation.possession_metrics",
+    "source_sha256": "341bad48904b489d6e875397b27687f5d6a4d22a397f3dc8af3a00d48f16874d",
+    "retained_definitions": [
+      "validate_submission",
+      "read_label_csv",
+      "evaluate",
+      "transition_scores",
+      "_count_ambiguous",
+      "match_transitions",
+      "per_class_prf",
+      "alive_dead_f1",
+      "cohens_kappa",
+      "accuracy",
+      "macro_f1",
+      "possession_stats",
+      "possession_spells",
+      "segments",
+      "spell_scores",
+      "match_spells",
+      "matched_gt_flags",
+      "spell_overlaps",
+      "bootstrap_spell_f1",
+      "bootstrap_macro_f1",
+      "team_accuracy",
+      "possession_share",
+      "fragmentation",
+      "transitions",
+      "fill_abstentions",
+      "valid_runs",
+      "scored_confusion",
+      "confusion",
+      "label_codes"
+    ]
+  },
+  "src/starter/baseline.py": {
+    "source_module": "starter.baseline",
+    "source_sha256": "84d8a414fb1bdf8c7e1fbe4a8789fe6f9cc0c2cccec4685201285b75dbc0cfe6",
+    "retained_definitions": [
+      "write_submission",
+      "team_of_each_track"
+    ]
+  },
+  "src/player_track_quality.py": {
+    "source_module": "player_track_quality",
+    "source_sha256": "b808dff31d987341673cd5a7622ac44a0bc33cbaac2005ce259074e7e66daced",
+    "retained_definitions": [
+      "repair_player_tracks"
+    ]
+  },
+  "src/kickoff.py": {
+    "source_module": "kickoff",
+    "source_sha256": "0b79ec35a1b9dbc3100af885814fbb956d7572fc2e4945f02af8b90d9f3f8788",
+    "retained_definitions": [
+      "match_kickoffs",
+      "detect_kickoff",
+      "read_ball",
+      "kickoff_windows",
+      "kickoff_offset",
+      "decode_after_kickoff"
+    ]
+  },
+  "src/games.py": {
+    "source_module": "games",
+    "source_sha256": "3b2122794e9e0476e2b3a871d14880e5fa47c4feaeacf99caef054c2309076ce",
+    "retained_definitions": [
+      "source_frames",
+      "_source",
+      "require",
+      "asset_paths",
+      "half_video_blocks",
+      "frame_offset",
+      "halves"
+    ]
+  },
+  "src/starter/load_smart_tagging.py": {
+    "source_module": "starter.load_smart_tagging",
+    "source_sha256": "cacfe90acf1deb37b3aa3e4666d6a9d5595c1766d59fe24c9150e1a1d51d0c64",
+    "retained_definitions": [
+      "load",
+      "pattern_path"
+    ]
+  },
+  "src/sequence_possession.py": {
+    "source_module": "sequence_possession",
+    "source_sha256": "7d11a25397b1e0d9309b489fbc08b2ea4285dff00345fc6f0609ccb24ee1cccf",
+    "retained_definitions": [
+      "sequence_features",
+      "visibility_features",
+      "SequenceModel"
+    ]
+  },
+  "src/external_possession.py": {
+    "source_module": "external_possession",
+    "source_sha256": "f89c646738f258d69f393b1033d1b867f1128172757470beb8892fb78a9321f6",
+    "retained_definitions": [
+      "decode_costs",
+      "tracking_features",
+      "lagged_columns"
+    ]
+  },
+  "src/experiments/possession_spell_selection.py": {
+    "source_module": "experiments.possession_spell_selection",
+    "source_sha256": "c3ecf06856ea50d4e32f7fe17a43f236798985bbac350392099e173106c46d86",
+    "retained_definitions": [
+      "select_spells",
+      "intervals",
+      "build_case"
+    ]
+  },
+  "src/experiments/possession_hybrid_refinement.py": {
+    "source_module": "experiments.possession_hybrid_refinement",
+    "source_sha256": "a160991028a656b22a4a71a68d28ddfa115a1bcade556f8cfaadeb33c696ed73",
+    "retained_definitions": [
+      "team_p",
+      "restore",
+      "LiveDecoder"
+    ]
+  },
+  "src/experiments/possession_retrain_score.py": {
+    "source_module": "experiments.possession_retrain_score",
+    "source_sha256": "a41e89679c68b64ed7e2eb14e810b13a80df79cf0eeb9ab3256e660e008f0b79",
+    "retained_definitions": [
+      "native_probabilities"
+    ]
+  },
+  "src/experiments/possession_retrain_data.py": {
+    "source_module": "experiments.possession_retrain_data",
+    "source_sha256": "96b0adddf4beb98c5eb5b9f08fd06a9d5c9bacb99a3466cea976b759d38d2059",
+    "retained_definitions": [
+      "canonical",
+      "frame_features",
+      "average",
+      "touch_history",
+      "velocity",
+      "mirrored"
+    ]
+  },
+  "src/experiments/possession_retrain.py": {
+    "source_module": "experiments.possession_retrain",
+    "source_sha256": "d3c9da6a6c7f786b7a543fd5fdde31ad847b42600fa86ad78cee6ef7619ade8d",
+    "retained_definitions": [
+      "predict",
+      "load_model",
+      "SpatialTCN"
+    ],
+    "packaging_change": "TCN-only checkpoint guard; unused GRU alternative removed"
+  },
+  "src/experiments/possession_physics.py": {
+    "source_module": "experiments.possession_physics",
+    "source_sha256": "5bfa7b84edc5f5bb1cf12b8099f310f9a49b2f6d4ce39b88badfece5f734b244",
+    "retained_definitions": [
+      "turnover_adjustment"
+    ]
+  },
+  "src/tactical_baseline.py": {
+    "source_module": "tactical_baseline",
+    "source_sha256": "cc5ecbf14b76130304be11e1f28c521e7af47649a34eb3c9a3252b836d6b485a",
+    "retained_definitions": [
+      "fill_short_gaps",
+      "decode",
+      "read_tracking",
+      "enumerate_tracking"
+    ]
+  },
+  "src/experiments/possession_tcn.py": {
+    "source_module": "experiments.possession_tcn",
+    "source_sha256": "f3f5353faa2ba01ec0e7062876fb37c30a6a63ecf60dd44a00d04c154158402d",
+    "retained_definitions": [
+      "PossessionTCN",
+      "DilatedConvolutions"
+    ]
+  },
+  "src/experiments/possession_study.py": {
+    "source_module": "experiments.possession_study",
+    "source_sha256": "7ed1a7c8626e5795992d719144cae78c4e2565148bf215520fe9a5167a132e41",
+    "retained_definitions": [
+      "columns",
+      "decode_sampled",
+      "dense_scores"
+    ]
+  },
+  "src/experiments/ball_recovery_experiment.py": {
+    "source_module": "experiments.ball_recovery_experiment",
+    "source_sha256": "41bad45abf7630f24c918c7499363c64f3b3a7b562340af30c25180515b5654b",
+    "retained_definitions": [
+      "contest_tracking"
+    ]
+  }
+}

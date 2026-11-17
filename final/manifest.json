@@ -1,0 +1,37 @@
+{
+  "team": "Absolute Donut",
+  "members": [
+    "Eduardus Tjitrahardja",
+    "Louis Jefferson Zhang",
+    "Louis Jefferson Zhang",
+    "Louis Jefferson Zhang"
+  ],
+  "method": "Learned spell scoring",
+  "submission_sha256": "620787b852d441d27c81c1c3e1175c13c64d6f0486be11fafd3666c906040d55",
+  "rows": 199319,
+  "fps": 25,
+  "public_window": [
+    11185,
+    18685
+  ],
+  "public_spell_f1": 0.72,
+  "public_macro_f1": 0.918671,
+  "nested_external_spell_f1": 0.6569677640597393,
+  "artifacts": {
+    "models/deadball/features.joblib": "f721051bd545f49b8327a148dabd24ac4fb89aec369f564a1195de0e69a51432",
+    "models/deadball/model.pt": "607d421ae5619a5684fda3bfe6ff2d34c4da6dcb9a4cefea12891d450ccb2d2b",
+    "models/deadball/transform.json": "24d948192b7a752aa0c6497d52c5863d837e00d62f13b148bb3c618f3b775991",
+    "models/spatial/final-seed413.pt": "dc21dbde2101ffe7cd1d2c2cf5a9d6d33d99dca1c6946fc789a5c97bda0fa739",
+    "models/spells/judge.joblib": "0ee04fcbf30dfb21fc3998be34bc35f47ec3bf1c178ae0b1e25e25ea8767d883",
+    "models/spells/selection.json": "b77a56a327e8ec3fc3a371c1114175ff97918d241fef8be3f46921b43908028f"
+  },
+  "python": "3.12.3",
+  "runtime": {
+    "torch": "2.15.0",
+    "numpy": "2.4.6",
+    "scipy": "1.18.1",
+    "pandas": "3.1.1",
+    "scikit-learn": "1.9.1",
+    "joblib": "1.6.0"
+  }
+}
