@@ -36,8 +36,31 @@ def choose_start(positions, labels, frames):
     raise ValueError("no sample covering all three possession labels with at least 85% ball coverage")
 
 
-def render(root, model_path, output, match_id, start_frame=None):
-    model, costs, lags = load_model(model_path)
+def round_two_prediction(selection_path, positions, weights, teams, pitch, fps):
+    import torch
+
+    from experiments.possession_round2 import decoded, mix, source_from
+    from experiments.possession_round2_decoder import Decoder
+    from experiments.possession_round2_train import load
+    from player_track_quality import repair_player_tracks
+    from sequence_possession import sequence_features, sequence_probabilities
+
+    decision = json.loads(selection_path.read_text())
+    if decision["decoder"]:
+        raise ValueError("the round-two replay requires the frozen fixed-decoder recipe")
+    source = source_from(decision["source"])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.use_deterministic_algorithms(True)
+    repaired = repair_player_tracks(positions, fps)
+    normal, mirrored = sequence_features(repaired, weights, teams, pitch, fps, True)
+    probabilities_by_model = [sequence_probabilities(load(path, device), normal, mirrored, fps, device)
+                              for path in source.paths]
+    emissions = mix(probabilities_by_model, source.weights, source.space)
+    decoder = Decoder(selection_path.parent)
+    return np.array(list("HAD"))[decoded(decoder, emissions, fps, {}, decision["duration"], None)]
+
+
+def render(root, model_path, output, match_id, start_frame=None, round_two_selection=None):
     match = json.loads((root / f"{match_id}_match.json").read_text())
     home = match["home_team"]["name"]
     away = match["away_team"]["name"]
@@ -49,9 +72,13 @@ def render(root, model_path, output, match_id, start_frame=None):
     start = start_frame
     if not 0 <= start <= len(labels) - frames:
         raise ValueError("the 20-second clip must fit within the first half")
-    x, mirrored = tracking_features(positions, weights, teams, pitch, fps, lags)
-    emission = np.log(np.maximum(probabilities(model, x, mirrored), 1e-6))
-    prediction = decode_costs(emission, fps, *costs)
+    if round_two_selection is None:
+        model, costs, lags = load_model(model_path)
+        x, mirrored = tracking_features(positions, weights, teams, pitch, fps, lags)
+        emission = np.log(np.maximum(probabilities(model, x, mirrored), 1e-6))
+        prediction = decode_costs(emission, fps, *costs)
+    else:
+        prediction = round_two_prediction(round_two_selection, positions, weights, teams, pitch, fps)
     source_labels = "HADX"
     names = {"H": home, "A": away, "D": "Stopped play", "X": "Unlabeled"}
     font = ImageFont.truetype("DejaVuSans.ttf", 21)
@@ -130,9 +157,11 @@ def render(root, model_path, output, match_id, start_frame=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skillcorner", type=Path, required=True)
-    parser.add_argument("--model", type=Path, required=True)
+    model = parser.add_mutually_exclusive_group(required=True)
+    model.add_argument("--model", type=Path)
+    model.add_argument("--round-two-selection", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--match", type=int, choices=sorted(TEST_MATCHES), default=SAMPLE_MATCH)
     parser.add_argument("--start-frame", type=int, help="zero-based first-half start of the 20-second clip")
     args = parser.parse_args()
-    render(args.skillcorner, args.model, args.output, args.match, args.start_frame)
+    render(args.skillcorner, args.model, args.output, args.match, args.start_frame, args.round_two_selection)
