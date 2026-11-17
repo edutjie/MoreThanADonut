@@ -7,7 +7,9 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from kickoff import detect_kickoff, kickoff_windows, prekickoff_dead  # noqa: E402
+from kickoff import (  # noqa: E402
+    decode_after_kickoff, detect_kickoff, kickoff_offset, kickoff_windows, prekickoff_dead,
+)
 
 FPS = 25
 CENTRE = (52.65, 34.0)
@@ -68,13 +70,64 @@ class DetectKickoff(unittest.TestCase):
         ball[151:160] = np.asarray(CENTRE) + np.arange(1, 10)[:, None] * np.array([0.1, 0.0])
         frame, method = detect_kickoff(ball, (100, 220, 200), CENTRE, FPS)
         self.assertEqual(method, "tracking")
-        self.assertLessEqual(frame, 152)  # first motion at 151; one frame is free in the metric
+        # first motion at 151; a 2.5 m/s creep inside the jitter band costs at most two frames
+        self.assertLessEqual(frame, 153)
 
     def test_return_after_window_end_still_rejects_a_nudge(self):
         ball = np.tile(np.asarray(CENTRE), (300, 1))
         ball[205:215] += np.linspace(0.5, 2.0, 10)[:, None] * np.array([1.0, 0.0])
         # back on the spot from frame 215, after the window stop at 212
         frame, method = detect_kickoff(ball, (100, 212, 160), CENTRE, FPS)
+        self.assertEqual((frame, method), (160, "tag"))
+
+    def test_frozen_ball_that_reappears_moving_from_the_spot(self):
+        ball = resting_then_kicked(kick=150, speed=12.0)
+        ball[:150] = np.array([100.0, 30.0])  # tracker holds the last live position, far away
+        ball[150] = np.asarray(CENTRE) + np.array([0.3, 0.0])
+        frame, method = detect_kickoff(ball, (100, 220, 200), CENTRE, FPS)
+        self.assertEqual(method, "tracking")
+        self.assertIn(frame, (150, 151))
+
+    def test_hidden_ball_that_appears_moving_from_the_spot(self):
+        ball = resting_then_kicked(kick=150, speed=8.0)
+        ball[:150] = np.nan
+        frame, method = detect_kickoff(ball, (100, 220, 200), CENTRE, FPS)
+        self.assertEqual(method, "tracking")
+        self.assertIn(frame, (150, 151))
+
+    def test_radius_argument_overrides_default(self):
+        ball = resting_then_kicked() + np.array([3.5, 0.0])
+        self.assertEqual(detect_kickoff(ball, (100, 220, 160), CENTRE, FPS)[1], "tag")
+        self.assertEqual(detect_kickoff(ball, (100, 220, 160), CENTRE, FPS, radius=4.0)[1], "tracking")
+
+    def test_noisy_rest_sighting_is_not_the_strike(self):
+        for outlier in (140, 145, 148):
+            ball = resting_then_kicked()
+            ball[outlier, 1] += 0.2
+            frame, method = detect_kickoff(ball, (100, 220, 160), CENTRE, FPS)
+            self.assertEqual(method, "tracking", outlier)
+            self.assertGreaterEqual(frame, 149, outlier)
+
+    def test_jittery_rest_is_rarely_early(self):
+        early = 0
+        for seed in range(50):
+            ball = resting_then_kicked(jitter=0.08, seed=seed)
+            frame, _ = detect_kickoff(ball, (100, 220, 160), CENTRE, FPS)
+            early += frame < 148
+        self.assertLessEqual(early, 5)
+
+    def test_slow_push_that_returns_after_reaching_is_rejected(self):
+        ball = np.tile(np.asarray(CENTRE), (300, 1))
+        ball[150:164] += (np.arange(1, 15) * 0.12)[:, None] * np.array([1.0, 0.0])
+        ball[164:176] = np.asarray(CENTRE) + np.array([1.6, 0.0])
+        frame, method = detect_kickoff(ball, (100, 220, 160), CENTRE, FPS)
+        self.assertEqual((frame, method), (160, "tag"))
+
+    def test_checks_look_past_the_window_end(self):
+        ball = resting_then_kicked(kick=210)
+        ball[211:232] = np.nan  # long gap right after the strike
+        ball[232:] = np.asarray(CENTRE)  # back on the spot after the gap: not a kick
+        frame, method = detect_kickoff(ball, (100, 213, 160), CENTRE, FPS)
         self.assertEqual((frame, method), (160, "tag"))
 
     def test_strike_outside_window_is_ignored(self):
@@ -113,6 +166,38 @@ class PrekickoffDead(unittest.TestCase):
         before = self.labels.copy()
         prekickoff_dead(self.labels, self.blocks, {2: 13})
         np.testing.assert_array_equal(self.labels, before)
+
+
+class DecodeAfterKickoff(unittest.TestCase):
+    def test_offset_is_clamped_to_the_half(self):
+        kickoffs = {1: (3, "tag"), 2: (40, "tag"), 3: (99, "tag")}
+        self.assertEqual(kickoff_offset(kickoffs, 1, 10, 30), 0)
+        self.assertEqual(kickoff_offset(kickoffs, 2, 10, 50), 30)
+        self.assertEqual(kickoff_offset(kickoffs, 3, 10, 50), 41)
+        self.assertEqual(kickoff_offset(kickoffs, 4, 10, 50), 0)
+
+    def test_decoder_runs_from_the_offset_only(self):
+        seen = []
+
+        def decode(k):
+            seen.append(k)
+            return np.array(["H"] * (6 - k))
+
+        out = decode_after_kickoff(decode, 6, 2)
+        self.assertEqual("".join(out), "DDHHHH")
+        self.assertEqual(seen, [2])
+
+    def test_zero_offset_matches_plain_decoding(self):
+        out = decode_after_kickoff(lambda k: np.array(list("HAD")[k:]), 3, 0)
+        self.assertEqual("".join(out), "HAD")
+
+    def test_whole_half_before_kickoff_skips_the_decoder(self):
+        out = decode_after_kickoff(lambda k: 1 / 0, 4, 4)
+        self.assertEqual("".join(out), "DDDD")
+
+    def test_wrong_length_raises(self):
+        with self.assertRaises(ValueError):
+            decode_after_kickoff(lambda k: np.array(["H"]), 4, 1)
 
 
 class KickoffWindows(unittest.TestCase):

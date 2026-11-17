@@ -61,9 +61,10 @@ def dense_scores(model, normal, mirror, device):
     return p
 
 
-def decode_sampled(p, frames, length, fps):
+def decode_sampled(p, frames, length, fps, start=0):
+    """Interpolate sampled probabilities to every frame and decode frames start..length-1."""
     restored = np.column_stack([np.interp(np.arange(length), frames, p[:, k]) for k in range(3)])
-    return decode_costs(np.log(np.maximum(restored, 1e-6)), fps, *DECODER_COSTS)
+    return decode_costs(np.log(np.maximum(restored[start:], 1e-6)), fps, *DECODER_COSTS)
 
 
 def evaluate(folders, predict):

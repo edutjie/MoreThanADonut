@@ -16,6 +16,7 @@ from experiments.possession_study_data import track_channels
 from experiments.possession_tcn import PlayerTCN, PossessionTCN
 from external_possession import SKILLCORNER_FPS
 from games import GAME, half_video_blocks
+from kickoff import decode_after_kickoff, kickoff_offset, match_kickoffs
 from player_track_quality import repair_player_tracks
 from sequence_possession import ARCHITECTURES, sequence_features
 from starter.baseline import write_submission
@@ -97,15 +98,22 @@ def main():
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--prekickoff", action="store_true",
+                        help="label graded frames before each detected kickoff D and decode from it")
     args = parser.parse_args()
     predict = frozen_candidate(args.candidate, args.device)
     positions, teams, pitch, fps = contest_tracking(args.data_dir)
+    kickoffs = match_kickoffs(args.data_dir, ball=positions[:, -1]) if args.prekickoff else {}
     labels = np.full(len(positions), "X")
-    for _, first, last in half_video_blocks(GAME):
+    for half, first, last in half_video_blocks(GAME):
         tracks = repair_player_tracks(positions[first:last + 1], fps)
         sample = np.rint(np.arange(0, len(tracks), fps / SKILLCORNER_FPS)).astype(int)
         p = predict(tracks, teams, pitch, fps, sample)
-        labels[first:last + 1] = decode_sampled(p, sample, len(tracks), fps)
+        offset = kickoff_offset(kickoffs, half, first, last)
+        labels[first:last + 1] = decode_after_kickoff(
+            lambda k: decode_sampled(p, sample, len(tracks), fps, start=k), len(tracks), offset)
+        if args.prekickoff:
+            print(f"half {half}: kickoff {kickoffs.get(half)}, {offset} graded frames set to D")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write_submission(args.output, labels)
 

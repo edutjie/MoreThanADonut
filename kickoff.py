@@ -8,12 +8,12 @@ are only warming up.
 The kickoff frame is found from the provided inputs only:
 
 1. The Smart Tagging `Kick Off (Start)` instance for the half bounds the search window.
-2. Inside that window, the kickoff is the first frame where the tracked ball leaves a still
-   position near the centre spot and keeps moving away from it.
+2. Inside that window, the kickoff is the first frame where the tracked ball, seen near the
+   centre spot, moves clearly away from it and does not come back.
 3. If the tracking never shows that, the midpoint of the tagged window is used instead.
 
-The thresholds below are physical and set before looking at any match: a ball placed on the spot
-is still to within tracking noise, and a kicked ball moves well clear of it within half a second.
+The thresholds are physical, except the spot radius, which is chosen on external kickoffs. None
+of them is fitted to the provided match.
 
     python kickoff.py --input possession.csv --output possession_kickoff.csv
 
@@ -36,15 +36,13 @@ from games import GAME, GAMES, half_video_blocks, require, source_frames  # noqa
 from starter.load_smart_tagging import KICKOFF_CODE, KICKOFF_TYPE  # noqa: E402
 from starter.load_smart_tagging import load as load_tags  # noqa: E402
 
-# Params, fixed a priori in metres and seconds.
-SPOT_RADIUS_M = 2.0       # the ball must rest this close to the centre spot
-STILL_TOLERANCE_M = 0.3   # tracking jitter allowed while the ball rests
-STILL_MIN_FRAMES = 3      # observed frames at rest before the strike
-STILL_LOOKBACK_S = 0.5    # those frames must fall inside this lookback
-MOVE_M = 0.3              # first displacement that counts as the strike
-CONFIRM_M = 1.5           # the ball must get this far from rest ...
-CONFIRM_S = 0.6           # ... within this time of the strike
-NO_RETURN_S = 1.0         # and not come back to rest within this time
+# Params in metres and seconds. SPOT_RADIUS_M is chosen on external kickoffs (IDSSE) from a grid
+# declared before the run; see experiments/kickoff_validation.py. The rest are physical a priori.
+SPOT_RADIUS_M = 3.0       # the ball must be seen this close to the centre spot
+STILL_TOLERANCE_M = 0.3   # tracking jitter around a stationary ball
+CONFIRM_M = 1.5           # a kicked ball gets this far from the spot ...
+CONFIRM_S = 0.6           # ... within this time
+NO_RETURN_S = 1.0         # and does not come back within this time
 WINDOW_PAD_S = 2.0        # search this much either side of the tagged window
 HALF_NAMES = {1: "1st half", 2: "2nd half"}
 
@@ -71,57 +69,67 @@ def kickoff_windows(tags, fps):
     return windows
 
 
-def detect_kickoff(ball, window, centre, fps):
+def detect_kickoff(ball, window, centre, fps, radius=None):
     """(frame, method) of the kickoff strike inside window = (first, stop, fallback).
 
     ball holds pitch coordinates in metres, NaN where the ball is not tracked, indexed by the same
     frames as the window. method is "tracking" when the strike was seen and "tag" otherwise.
+
+    A candidate is an observation within `radius` of the centre spot from which the ball travels
+    CONFIRM_M within CONFIRM_S of its next observation and, once there, comes back to neither the
+    candidate position nor the spot within NO_RETURN_S. Trackers often hide or freeze the ball
+    while it waits on the spot, so the ball need not be seen at rest first. The strike is the
+    frame after the last observation still at the rest position. When the ball was last seen near
+    the spot shortly before a gap, the strike is placed right after that sighting, so a kick
+    hidden by the gap is not detected late.
     """
     first, stop, fallback = window
-    lookback = int(round(STILL_LOOKBACK_S * fps))
+    radius = SPOT_RADIUS_M if radius is None else radius
     confirm = int(round(CONFIRM_S * fps))
     no_return = int(round(NO_RETURN_S * fps))
     centre = np.asarray(centre, dtype=float)
     stop = min(stop, len(ball))
-    # Candidates must strike before `stop`, but the checks after a strike may look past it.
-    horizon = min(len(ball), stop + no_return + 1)
-    observed = np.flatnonzero(np.isfinite(ball[:horizon]).all(axis=1))
-    observed = observed[observed > first - lookback]
+    # Candidates must lie before `stop`; the checks after a candidate may look past it.
+    observed = np.flatnonzero(np.isfinite(ball).all(axis=1))
+    near = np.linalg.norm(ball[observed] - centre, axis=1) <= radius
 
-    for frame in observed:
-        if frame < first:
-            continue
+    for position in range(np.searchsorted(observed, first), len(observed)):
+        frame = observed[position]
         if frame >= stop:
             break
-        # A rest position is the median of a short, fully still stretch of observations.
-        recent = observed[(observed > frame - lookback) & (observed <= frame)]
-        if len(recent) < STILL_MIN_FRAMES:
+        if not near[position]:
             continue
-        anchor = np.median(ball[recent], axis=0)
-        if np.linalg.norm(anchor - centre) > SPOT_RADIUS_M:
-            continue
-        if np.any(np.linalg.norm(ball[recent] - anchor, axis=1) > STILL_TOLERANCE_M):
-            continue
-        # Keep the anchor fixed and find the first observation that leaves it.
-        later = observed[observed > frame]
-        distance = np.linalg.norm(ball[later] - anchor, axis=1)
-        leaving = np.flatnonzero(distance > MOVE_M)
-        if not len(leaving):
+        later = observed[position + 1:]
+        if not len(later):
             break
-        # Err early: the strike follows the last observation still well inside the jitter band,
-        # so a ball that creeps off the spot is not counted as resting.
-        settled = later[:leaving[0]][distance[:leaving[0]] <= STILL_TOLERANCE_M / 2]
-        strike = (settled[-1] if len(settled) else frame) + 1
+        distance = np.linalg.norm(ball[later] - ball[frame], axis=1)
+        reach = np.flatnonzero((distance >= CONFIRM_M) & (later <= later[0] + confirm))
+        if not len(reach):
+            continue
+        reached = later[reach[0]]
+        settle = later[reach[0]:][later[reach[0]:] <= reached + no_return]
+        back = np.minimum(np.linalg.norm(ball[settle] - ball[frame], axis=1),
+                          np.linalg.norm(ball[settle] - centre, axis=1))
+        if np.any(back <= STILL_TOLERANCE_M):
+            continue  # the ball came back: a nudge or a placement, not a kick
+        # Rest position: median of the candidate and the observations that stay within jitter of
+        # it. The strike follows the last observation before the reach point that is still at
+        # that position, so an isolated noisy sighting during the rest is not read as the kick.
+        track = np.r_[frame, later[:reach[0] + 1]]
+        stay = np.flatnonzero(distance > STILL_TOLERANCE_M)
+        anchor = np.median(ball[np.r_[frame, later[:stay[0]]]], axis=0)
+        still = np.flatnonzero(np.linalg.norm(ball[track[:-1]] - anchor, axis=1)
+                               <= STILL_TOLERANCE_M / 2)
+        last_still = still[-1] if len(still) else 0
+        strike = track[last_still] + 1
+        previous = observed[position - 1] if position else None
+        if (last_still == 0 and previous is not None and near[position - 1]
+                and frame - previous <= no_return
+                and np.linalg.norm(ball[frame] - ball[previous]) > STILL_TOLERANCE_M):
+            strike = previous + 1  # the kick happened during the gap before this sighting
         if strike >= stop:
             break
-        # Time the checks from the first observation off the spot, which a tracking gap can delay.
-        after = later[leaving[0]:]
-        after_distance = distance[leaving[0]:]
-        reached = np.any(after_distance[after <= after[0] + confirm] >= CONFIRM_M)
-        returned = np.any(after_distance[after <= after[0] + no_return] <= STILL_TOLERANCE_M)
-        if reached and not returned:
-            # The strike happened after the last frame the ball was seen at rest.
-            return int(strike), "tracking"
+        return int(strike), "tracking"
     return int(fallback), "tag"
 
 
@@ -161,15 +169,43 @@ def read_ball(raw_path, n_frames, pitch):
     return ball
 
 
-def match_kickoffs(data_dir=None, game=GAME):
-    """{half: (frame, method)} for the provided match."""
+def match_kickoffs(data_dir=None, game=GAME, ball=None):
+    """{half: (frame, method)} for the provided match.
+
+    ball, when given, is the match's ball track in metres on the video frame grid; otherwise it is
+    read from the raw tracking.
+    """
     fps = GAMES[game]["fps"]
     pitch = GAMES[game]["pitch"]
-    (raw_path,) = require(["atd_raw"], game, data_dir)
-    ball = read_ball(raw_path, source_frames(game=game), pitch)
+    if ball is None:
+        (raw_path,) = require(["atd_raw"], game, data_dir)
+        ball = read_ball(raw_path, source_frames(game=game), pitch)
     windows = kickoff_windows(load_tags(game, data_dir), fps)
     centre = (pitch[0] / 2.0, pitch[1] / 2.0)
-    return {half: detect_kickoff(ball, window, centre, fps) for half, window in windows.items()}
+    return {half: detect_kickoff(np.asarray(ball, dtype=float), window, centre, fps)
+            for half, window in windows.items()}
+
+
+def kickoff_offset(kickoffs, half, first, last):
+    """Graded frames of a half that precede its detected kickoff, clamped to the half."""
+    if half not in kickoffs:
+        return 0
+    return int(np.clip(kickoffs[half][0], first, last + 1)) - first
+
+
+def decode_after_kickoff(decode, length, offset):
+    """Labels for one half: D before offset, then decode(offset) for the frames from offset on.
+
+    decode receives the offset and must return labels for frames offset..length-1, so a sequence
+    decoder starts fresh at the kickoff instead of carrying warm-up evidence across it.
+    """
+    out = np.full(length, DEAD, dtype="<U1")
+    if offset < length:
+        decoded = np.asarray(decode(offset))
+        if len(decoded) != length - offset:
+            raise ValueError(f"decoder returned {len(decoded)} labels for {length - offset} frames")
+        out[offset:] = decoded
+    return out
 
 
 def read_labels(path):
