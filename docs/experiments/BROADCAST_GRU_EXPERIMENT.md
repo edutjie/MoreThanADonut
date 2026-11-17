@@ -3,7 +3,7 @@
 The [current GRU baseline](../../TACTICAL_BASELINE.md#current-experiment-baseline)
 was trained on SkillCorner A-League broadcast-derived tracking. This experiment
 tests using the contest broadcast tracking wherever the existing
-[frame map](BROADCAST_INTEGRATION_EXPERIMENT.md) verifies alignment.
+[frame map](../../broadcast_alignment.py) verifies alignment.
 
 ## Method
 

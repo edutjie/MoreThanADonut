@@ -14,10 +14,10 @@ That folder is local to your checkout.
 - [IDSSE Bundesliga training](IDSSE_TRAINING.md)
 - [GRU and Transformer](SEQUENCE_POSSESSION.md)
 - [TCN, AutoGluon, MOMENT, and Mantis](TCN_AUTOML_FOUNDATION.md)
+- [Competition data provenance and retired experiments](COMPETITION_DATA_AUDIT.md)
 - [Player track quality](PLAYER_TRACK_QUALITY.md)
 - [External training data audit](EXTERNAL_TRAINING_DATA.md)
 - [Additional external data experiments](EXTERNAL_DATA_EXPERIMENTS.md)
-- [LSTM](LSTM_EXPERIMENT.md)
 
 ## Ball recovery and stoppages
 
@@ -28,14 +28,8 @@ That folder is local to your checkout.
 - [GRU with a dead-ball specialist](GRU_DEAD_BALL.md)
 - [Spell smoothing](SPELL_SMOOTHING.md)
 - [SoccerNet ball action spotting](SN_BAS_2025_EXPERIMENT.md)
-- [CALF action spotting](CALF_INTEGRATION_EXPERIMENT.md)
 
-## Broadcast and historical comparisons
+## Broadcast comparisons
 
-- [Broadcast alignment and tracking](BROADCAST_INTEGRATION_EXPERIMENT.md)
+- [Broadcast alignment and tracking](../../dashboard/README.md#playback-and-overlay-options)
 - [Aligned broadcast with GRU](BROADCAST_GRU_EXPERIMENT.md)
-- [Home/away attribution](HA_ATTRIBUTION_ANALYSIS.md)
-- [Historical findings](EXPERIMENT_FINDINGS.md)
-- [v5 baseline](V5_DOCUMENTATION.md)
-- [v5 optimization attempts](FINAL_OPTIMIZATION_ATTEMPTS.md)
-- [v5 results](FINAL_RESULTS.md)

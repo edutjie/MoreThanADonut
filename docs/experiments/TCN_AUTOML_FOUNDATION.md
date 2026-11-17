@@ -121,6 +121,10 @@ was lower than that control. The existing frozen GRU remains the baseline.
 The experiment uses one seed per neural architecture and two Bundesliga
 holdout games. Timing budgets can change AutoGluon iterations and weights.
 
+**Qualitative review.** edutjie preferred the aggregate TCN with the original
+113 tracking features over the frozen GRU. This observation is separate from
+checkpoint selection and the automated checks.
+
 ## Reproduce
 
 The commands assume the local datasets and GRU checkpoint described in

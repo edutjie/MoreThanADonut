@@ -1,5 +1,10 @@
 # v5 Documentation - What Was Missing from Handoffs
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 v5 is a historical reference. See [the external possession experiment](EXTERNAL_POSSESSION.md)
 for the current candidate. Commit `cad89df` records public-window comparisons
 used to choose the v5 transition cost. See the restriction in [RULES.md](../../RULES.md).

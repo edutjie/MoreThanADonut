@@ -1,5 +1,10 @@
 # Final Optimization Attempts (Rule-Compliant)
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 After stopping the LSTM training (would violate rules - training on test set), explored all remaining rule-compliant optimization paths.
 
 ## Summary: v5 is the Ceiling for Tracking-Only Heuristics

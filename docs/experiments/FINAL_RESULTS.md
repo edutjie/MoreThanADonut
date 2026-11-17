@@ -1,5 +1,10 @@
 # Final Results: Possession Prediction Optimization
 
+> **Retired experiment.** This is a historical record. It contains legacy
+> claims or commands involving models trained or tuned on the public window,
+> or derived comparisons. Do not use these results or commands for a
+> submission. See [the provenance audit](COMPETITION_DATA_AUDIT.md).
+
 **Date**: 2026-11-16  
 **Status**: Historical v5 experiment report. See [the external possession
 experiment](EXTERNAL_POSSESSION.md) for the current candidate and verification.
